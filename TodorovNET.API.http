@@ -1,0 +1,6 @@
+@TodorovNET.API_HostAddress = http://localhost:5048
+
+GET {{TodorovNET.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

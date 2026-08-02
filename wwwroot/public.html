@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TodorovNET — Live Класация</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;800;900&family=Barlow:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #060608; --bg2: #0d0d10; --bg3: #131318;
+  --b1: #1a1a22; --b2: #242430;
+  --or: #f97316; --w: #f0f0f5; --g1: #9090a8; --g2: #55556a;
+  --gr: #22c55e; --re: #ef4444; --bl: #3b82f6; --pu: #a855f7; --go: #fbbf24;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--w); font-family:'Barlow',sans-serif; min-height:100vh; }
+
+/* ── Header ── */
+.header {
+  background: linear-gradient(180deg, #0a0a0e 0%, var(--bg) 100%);
+  border-bottom: 1px solid var(--b1);
+  padding: 14px 20px;
+  display: flex; align-items: center; gap: 14px;
+  position: sticky; top: 0; z-index: 10;
+  backdrop-filter: blur(12px);
+}
+
+.logo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px; font-weight: 900;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.logo em { color: var(--or); font-style: normal; }
+
+.event-info { flex: 1; }
+.ev-name { font-size: 13px; font-weight: 700; color: var(--w); }
+.ev-loc  { font-size: 10px; color: var(--g2); margin-top: 1px; }
+
+.live-badge {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.2);
+  border-radius: 20px; padding: 5px 12px;
+  font-size: 11px; font-weight: 900;
+  text-transform: uppercase; letter-spacing: .1em;
+  color: var(--re);
+}
+.live-dot { width:7px; height:7px; border-radius:50%; background:var(--re); animation: pu 1.2s infinite; }
+@keyframes pu { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.9);opacity:.3} }
+
+.flag-display {
+  padding: 5px 14px; border-radius: 20px;
+  font-size: 11px; font-weight: 900; text-transform: uppercase;
+  border: 1px solid;
+}
+.flag-display.Green  { background:rgba(34,197,94,.08);  color:var(--gr); border-color:rgba(34,197,94,.2); }
+.flag-display.Yellow { background:rgba(245,158,11,.08); color:var(--go); border-color:rgba(245,158,11,.2); }
+.flag-display.Red    { background:rgba(239,68,68,.08);  color:var(--re); border-color:rgba(239,68,68,.2); }
+.flag-display.Black  { background:rgba(100,100,100,.08); color:#999;     border-color:#444; }
+
+/* ── Class tabs ── */
+.class-tabs {
+  display: flex; gap: 0; overflow-x: auto; padding: 0 20px;
+  border-bottom: 1px solid var(--b1);
+  scrollbar-width: none;
+}
+.class-tabs::-webkit-scrollbar { display: none; }
+
+.ctab {
+  padding: 10px 16px;
+  font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .06em;
+  cursor: pointer; color: var(--g2);
+  border-bottom: 2px solid transparent;
+  transition: .13s; white-space: nowrap;
+  flex-shrink: 0;
+}
+.ctab:hover { color: var(--w); }
+.ctab.act { color: var(--or); border-bottom-color: var(--or); }
+
+/* ── Main content ── */
+.wrap { max-width: 1100px; margin: 0 auto; padding: 18px 16px; }
+
+/* ── Stats ── */
+.stats { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.st {
+  flex: 1; min-width: 100px;
+  background: var(--bg2); border: 1px solid var(--b1); border-radius: 10px;
+  padding: 12px 14px; position: relative; overflow: hidden;
+}
+.st::after { content:''; position:absolute; top:0;left:0;right:0; height:2px; }
+.st.or::after { background:var(--or); }
+.st.gr::after { background:var(--gr); }
+.st.re::after { background:var(--re); }
+.st.bl::after { background:var(--bl); }
+.st-val { font-family:'Barlow Condensed',sans-serif; font-size:28px; font-weight:900; line-height:1; }
+.st-lbl { font-size:9px; color:var(--g2); text-transform:uppercase; letter-spacing:.1em; margin-top:2px; }
+
+/* ── Update bar ── */
+.upd-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 12px; background:var(--bg3); border:1px solid var(--b1);
+  border-radius: 8px; margin-bottom: 12px; font-size: 10px; color: var(--g2);
+}
+.upd-bar .fl { display:flex; align-items:center; gap:5px; }
+.conn-ok { color: var(--gr); font-weight:800; }
+.conn-no { color: var(--g2); }
+
+/* ── Table ── */
+.tbl-wrap { background:var(--bg2); border:1px solid var(--b1); border-radius:12px; overflow:hidden; }
+
+table { width:100%; border-collapse:collapse; }
+
+th {
+  padding: 8px 12px;
+  font-size: 8px; font-weight:800; text-transform:uppercase;
+  letter-spacing:.14em; color:var(--g2);
+  border-bottom: 1px solid var(--b1); background:var(--bg3);
+  text-align: left;
+}
+th.r { text-align: right; }
+
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--b1);
+  font-size: 13px; vertical-align: middle;
+}
+tr:last-child td { border-bottom: none; }
+tr.gold   td { background: linear-gradient(90deg,rgba(251,191,36,.04),transparent); }
+tr.silver td { background: linear-gradient(90deg,rgba(192,192,192,.025),transparent); }
+tr.bronze td { background: linear-gradient(90deg,rgba(205,127,50,.025),transparent); }
+tr.flash  td { animation: flash .8s ease; }
+@keyframes flash { 0%{background:rgba(249,115,22,.12)} 100%{background:transparent} }
+
+.pos { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:900; }
+.pos.g { color:var(--go); } .pos.s { color:#C0C0C0; } .pos.b { color:#CD7F32; } .pos.x { color:var(--g2); }
+
+.rn {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:36px; height:22px; border-radius:4px;
+  font-family:'Share Tech Mono',monospace; font-size:11px; font-weight:700;
+  background:#111; color:#fff; border:1.5px solid #444; padding:0 4px;
+}
+
+.mo { font-family:'Share Tech Mono',monospace; font-weight:700; }
+.mo.nav   { color:var(--bl); }
+.mo.xc    { color:var(--or); }
+.mo.ss    { color:var(--pu); }
+.mo.pen   { color:var(--re); }
+.mo.total { font-size:15px; color:var(--or); }
+
+.badge {
+  display:inline-flex; padding:2px 7px; border-radius:4px;
+  font-size:9px; font-weight:900; text-transform:uppercase; border:1px solid;
+}
+.badge.ok  { background:rgba(34,197,94,.07);  color:var(--gr); border-color:rgba(34,197,94,.2); }
+.badge.dnf { background:rgba(239,68,68,.07);  color:var(--re); border-color:rgba(239,68,68,.2); }
+.badge.dns { background:rgba(100,116,139,.07); color:#64748b;  border-color:rgba(100,116,139,.15); }
+.badge.dsq { background:rgba(168,85,247,.07); color:var(--pu); border-color:rgba(168,85,247,.2); }
+
+/* ── Footer ── */
+.footer {
+  text-align:center; padding:20px;
+  font-size:10px; color:var(--g2);
+  border-top:1px solid var(--b1); margin-top:20px;
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">Todo<em>r</em>ovNET</div>
+  <div class="event-info">
+    <div class="ev-name" id="ev-name">Зареждане...</div>
+    <div class="ev-loc" id="ev-loc">—</div>
+  </div>
+  <div class="flag-display Green" id="flag-display">🟢 Зелено знаме</div>
+  <div class="live-badge"><div class="live-dot"></div> <span id="conn-lbl">Live</span></div>
+</header>
+
+<div class="class-tabs" id="class-tabs">
+  <div class="ctab act" onclick="filterClass(null,this)">Всички</div>
+</div>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="st or"><div class="st-val" id="s-fin">—</div><div class="st-lbl">Финишираха</div></div>
+    <div class="st re"><div class="st-val" id="s-dnx">—</div><div class="st-lbl">DNS / DNF</div></div>
+    <div class="st bl"><div class="st-val" id="s-tot">—</div><div class="st-lbl">Участника</div></div>
+    <div class="st gr"><div class="st-val" id="s-cls">—</div><div class="st-lbl">Класа</div></div>
+  </div>
+
+  <div class="upd-bar">
+    <div class="fl">
+      <span id="conn-status" class="conn-ok">● Свързан Live</span>
+    </div>
+    <div>Последно обновяване: <strong id="upd-time">—</strong></div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:34px">#</th>
+          <th style="width:44px">№</th>
+          <th>Участник</th>
+          <th>Клас</th>
+          <th class="r">Nav</th>
+          <th class="r">XC</th>
+          <th class="r">SS</th>
+          <th class="r">Пен.</th>
+          <th class="r">Общо</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody id="standings-body">
+        <tr><td colspan="10" style="text-align:center;padding:50px;color:var(--g2)">
+          <div style="font-size:30px;margin-bottom:10px">🏁</div>
+          Изчакване на резултати...
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer">
+  TodorovNET · Live Timing System · Автоматично обновяване в реално време
+</div>
+
+<script>
+const API = 'http://localhost:5048/api';
+let EVENT_ID = 1;
+let fullStandings = [];
+let allRiders = [];
+let allClasses = [];
+
+// ── SignalR ──
+const conn = new signalR.HubConnectionBuilder()
+  .withUrl('http://localhost:5048/hubs/race')
+  .withAutomaticReconnect()
+  .build();
+
+conn.on('StandingsUpdated', data => {
+  fullStandings = data || [];
+  renderStandings(data);
+  setUpd();
+  flashAll();
+});
+
+async function startSignalR() {
+  try {
+    await conn.start();
+    await conn.invoke('JoinEvent', EVENT_ID);
+    setConn(true);
+  } catch { setConn(false); setTimeout(startSignalR, 3000); }
+}
+conn.onreconnected(() => { conn.invoke('JoinEvent', EVENT_ID); setConn(true); });
+conn.onclose(() => setConn(false));
+
+function setConn(ok) {
+  document.getElementById('conn-lbl').textContent = ok ? 'Live' : 'Изключен';
+  document.getElementById('conn-status').textContent = ok ? '● Свързан Live' : '○ Изключен';
+  document.getElementById('conn-status').className = ok ? 'conn-ok' : 'conn-no';
+}
+
+function setUpd() {
+  document.getElementById('upd-time').textContent = new Date().toLocaleTimeString('bg-BG');
+}
+
+function flashAll() {
+  document.querySelectorAll('#standings-body tr').forEach(r => {
+    r.classList.remove('flash');
+    void r.offsetWidth;
+    r.classList.add('flash');
+  });
+}
+
+// ── Load ──
+async function loadEvent() {
+  try {
+    const r = await fetch(`${API}/events/${EVENT_ID}`);
+    const e = await r.json();
+    document.getElementById('ev-name').textContent = e.name;
+    document.getElementById('ev-loc').textContent = e.location;
+    document.title = `${e.name} — Live`;
+    const fd = document.getElementById('flag-display');
+    fd.className = 'flag-display ' + e.flag;
+    const flagText = { Green:'🟢 Зелено знаме', Yellow:'🟡 Жълто знаме', Red:'🔴 Червено знаме', Black:'⬛ Черно знаме' };
+    fd.textContent = flagText[e.flag] || e.flag;
+  } catch {}
+}
+
+async function loadClasses() {
+  try {
+    const r = await fetch(`${API}/events/${EVENT_ID}/classes`);
+    allClasses = await r.json();
+    document.getElementById('s-cls').textContent = allClasses.length;
+    renderClassTabs();
+  } catch {}
+}
+
+async function loadRiders() {
+  try {
+    const r = await fetch(`${API}/events/${EVENT_ID}/riders`);
+    allRiders = await r.json();
+  } catch {}
+}
+
+async function loadStandings() {
+  try {
+    const r = await fetch(`${API}/events/${EVENT_ID}/results/standings`);
+    const data = await r.json();
+    fullStandings = data || [];
+    renderStandings(data);
+    setUpd();
+    document.getElementById('s-fin').textContent = data.filter(s => s.status === 'Finished').length;
+    document.getElementById('s-dnx').textContent = data.filter(s => s.status !== 'Finished').length;
+    document.getElementById('s-tot').textContent = data.length;
+  } catch {}
+}
+
+// ── Render ──
+function classBadge(className) {
+  if (!className) return '<span style="color:var(--g2);font-size:10px">—</span>';
+  const colors = { 'Pro':'#cccccc','Expert':'#ef4444','Senior 40+':'#f87171','Senior 50+':'#4ade80','Standard':'#86efac','Junior':'#60a5fa','Women':'#f472b6' };
+  const color = colors[className] || '#aaa';
+  return `<span style="display:inline-flex;padding:2px 7px;border-radius:3px;font-size:8.5px;font-weight:900;text-transform:uppercase;background:${color}18;color:${color};border:1px solid ${color}40">${className}</span>`;
+}
+
+function fmt(t) { return t ? t.substring(0,8) : '—'; }
+
+function statusBadge(s) {
+  const m = { Finished:['ok','✓ Finished'], DNF:['dnf','⛔ DNF'], DNS:['dns','— DNS'], DSQ:['dsq','🚫 DSQ'] };
+  const [cls, lbl] = m[s] || ['dns', s];
+  return `<span class="badge ${cls}">${lbl}</span>`;
+}
+
+function posClass(p) { return p===1?'g':p===2?'s':p===3?'b':'x'; }
+function rowClass(p) { return p===1?'gold':p===2?'silver':p===3?'bronze':''; }
+
+function renderStandings(data, isFiltered) {
+  const b = document.getElementById('standings-body');
+  if (!data?.length) {
+    b.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:50px;color:var(--g2)"><div style="font-size:30px;margin-bottom:10px">🏁</div>Няма резултати</td></tr>';
+    return;
+  }
+  let pos = 0;
+  b.innerHTML = data.map(s => {
+    const dp = s.status === 'Finished' ? ++pos : null;
+    return `<tr class="${rowClass(dp)}">
+      <td><span class="pos ${posClass(dp)}">${dp || '—'}</span></td>
+      <td><span class="rn">${s.rider.raceNumber}</span></td>
+      <td>
+        <div style="font-weight:700">${s.rider.firstName} ${s.rider.lastName}</div>
+        <div style="font-size:10px;color:var(--g2)">${s.rider.club || ''}</div>
+      </td>
+      <td>${classBadge(s.rider.class)}</td>
+      <td style="text-align:right"><span class="mo nav">${fmt(s.navTime)}</span></td>
+      <td style="text-align:right"><span class="mo xc">${fmt(s.xcTotal)}</span></td>
+      <td style="text-align:right"><span class="mo ss">${fmt(s.ssTotal)}</span></td>
+      <td style="text-align:right"><span class="mo pen">${s.penalties ? fmt(s.penalties) : '—'}</span></td>
+      <td style="text-align:right"><span class="mo total">${s.totalTime ? fmt(s.totalTime) : '—'}</span></td>
+      <td>${statusBadge(s.status)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderClassTabs() {
+  const tabs = document.getElementById('class-tabs');
+  const colors = { pro:'#ccc',exp:'#ef4444',s40:'#f87171',s50:'#4ade80',std:'#86efac',jun:'#60a5fa',wom:'#f472b6' };
+  tabs.innerHTML = `<div class="ctab act" onclick="filterClass(null,this)">Всички</div>` +
+    allClasses.map(c => `<div class="ctab" onclick="filterClass(${c.id},this)">${c.name}</div>`).join('');
+}
+
+function filterClass(classId, el) {
+  document.querySelectorAll('.ctab').forEach(t => t.classList.remove('act'));
+  el.classList.add('act');
+  if (!classId) { renderStandings(fullStandings); return; }
+  const filtered = fullStandings.filter(s => {
+    const rider = allRiders.find(r => r.raceNumber === s.rider.raceNumber);
+    return rider?.classId === classId;
+  });
+  renderStandings(filtered, true);
+}
+
+// ── Auto refresh every 30s ──
+setInterval(loadStandings, 30000);
+
+// ── Init ──
+loadEvent();
+loadClasses();
+loadRiders();
+loadStandings();
+startSignalR();
+</script>
+</body>
+</html>

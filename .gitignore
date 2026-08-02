@@ -1,0 +1,20 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## macOS
+.DS_Store
+
+## Secrets - do not commit real settings
+appsettings.json
+appsettings.*.local.json
+
+## Claude Code local state (contains a nested git worktree - must stay out of the repo)
+.claude/
+
+## Logs
+*.log
+*.bak
