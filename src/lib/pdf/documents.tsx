@@ -4,6 +4,7 @@ import { t, type Locale } from "@/i18n/config";
 import type { Dictionary } from "@/i18n/get-dictionary";
 import { localizedName, riderName, stageName, transliterate } from "@/i18n/localize";
 import { formatClock, formatDateRange, formatDuration, formatGap } from "@/lib/format";
+import type { SeasonStandings } from "@/lib/results/season";
 
 // Official result sheets, rendered on the server. Layout follows the documents officials already know
 // (per class, position, number, rider, times, points) with a status banner, version and signature line.
@@ -111,13 +112,16 @@ function Header({
   lang,
   dict,
   event,
+  heading,
   title,
   subtitle,
   publication,
 }: {
   lang: Locale;
   dict: Dictionary;
-  event: SnapshotEvent;
+  event?: SnapshotEvent;
+  /** Replaces the event name and meta line on documents that are not about one event. */
+  heading?: { name: string; meta: string };
   title: string;
   subtitle?: string;
   publication: PublicationInfo | null | "none";
@@ -134,15 +138,19 @@ function Header({
         : { label: dict.publication.live.toUpperCase(), style: styles.bannerLive };
   return (
     <View>
-      <Text style={styles.eventName}>{text(event.name)}</Text>
+      <Text style={styles.eventName}>{heading ? heading.name : event ? text(event.name) : ""}</Text>
       <Text style={styles.meta}>
-        {[
-          event.round_number ? t(dict.home.round, { n: event.round_number }) : null,
-          text(event.location),
-          formatDateRange(event.date_from, event.date_to, lang),
-        ]
-          .filter(Boolean)
-          .join(" · ")}
+        {heading
+          ? heading.meta
+          : event
+            ? [
+                event.round_number ? t(dict.home.round, { n: event.round_number }) : null,
+                text(event.location),
+                formatDateRange(event.date_from, event.date_to, lang),
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : ""}
       </Text>
       <View style={styles.titleRow}>
         <View>
@@ -327,6 +335,93 @@ export function ResultsDocument({
         <Header lang={lang} dict={dict} event={snapshot.event} title={title} subtitle={subtitle} publication={publication} />
         {body}
         <Footer dict={dict} generatedAt={generatedAt} signer={publication?.state === "official" ? publication.published_by_name : null} />
+      </Page>
+    </Document>
+  );
+}
+
+type SeasonRow = RiderFields & { position: number; gross_points: number; net_points: number; rounds: Record<number, number> };
+type TeamRow = { entry_id: number; club: string; position: number; team_points: number; rounds: Record<number, number> };
+
+export function SeasonDocument({
+  lang,
+  dict,
+  data,
+  view,
+  generatedAt,
+}: {
+  lang: Locale;
+  dict: Dictionary;
+  data: SeasonStandings;
+  view: "riders" | "teams";
+  generatedAt: string;
+}) {
+  const s = dict.season;
+  const text = (value: string) => (lang === "en" ? transliterate(value) : value);
+  const roundColumns = <Row extends { rounds: Record<number, number> }>(): Column<Row & { entry_id: number }>[] =>
+    data.rounds.map((round) => ({
+      label: t(s.round, { n: round.round_number ?? "?" }),
+      width: 30,
+      align: "right" as const,
+      render: (row: Row) => (row.rounds[round.id] != null ? `${row.rounds[round.id]}` : "–"),
+    }));
+
+  const title = view === "teams" ? `${t(s.heading, { year: data.season.year })} · ${s.team}` : t(s.heading, { year: data.season.year });
+  const note = view === "teams" ? s.teamNote : data.dropApplies ? s.finalNote : t(s.interimNote, { n: data.season.drop_worst_rounds + 1 });
+
+  let body: React.ReactNode;
+  if (view === "teams") {
+    const rows: TeamRow[] = data.teams.map((team) => ({ ...team, entry_id: team.club_id }));
+    body = (
+      <Table<TeamRow>
+        rows={rows}
+        columns={[
+          { label: dict.results.pos, width: 26, align: "right", bold: true, render: (x) => `${x.position}` },
+          { label: s.club, render: (x) => text(x.club) },
+          ...roundColumns<TeamRow>(),
+          { label: dict.results.total, width: 40, align: "right", bold: true, render: (x) => `${x.team_points}` },
+        ]}
+      />
+    );
+  } else {
+    const rows: SeasonRow[] = data.riders.map((rider) => ({ ...rider, entry_id: rider.rider_id, race_number: 0, country: "" }));
+    body = (
+      <ClassSections
+        lang={lang}
+        classes={data.classes}
+        rows={rows}
+        sort={(a, b) => a.position - b.position}
+        table={(classRows) => (
+          <Table<SeasonRow>
+            rows={classRows}
+            columns={[
+              { label: dict.results.pos, width: 26, align: "right", bold: true, render: (x) => `${x.position}` },
+              { label: dict.results.rider, render: riderCell(lang) },
+              ...roundColumns<SeasonRow>(),
+              { label: s.gross, width: 36, align: "right", bold: !data.dropApplies, render: (x) => `${x.gross_points}` },
+              ...(data.dropApplies
+                ? [{ label: s.net, width: 56, align: "right" as const, bold: true, render: (x: SeasonRow) => `${x.net_points}` }]
+                : []),
+            ]}
+          />
+        )}
+      />
+    );
+  }
+
+  return (
+    <Document title={title} author="TodorovNET" language={lang}>
+      <Page size="A4" style={styles.page}>
+        <Header
+          lang={lang}
+          dict={dict}
+          heading={{ name: title, meta: data.season.name }}
+          title={view === "teams" ? s.team : s.individual}
+          subtitle={note}
+          publication="none"
+        />
+        {body}
+        <Footer dict={dict} generatedAt={generatedAt} signer={null} />
       </Page>
     </Document>
   );

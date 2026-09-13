@@ -314,7 +314,14 @@ function cp1251(text) {
     await visitor.goto(`${APP}/en/s/${seasonId}?view=team`, { waitUntil: "networkidle2" });
     await waitText(visitor, "Championship standings 2026");
     await waitText(visitor, "Teams: each club");
+    const pdf = await visitor.evaluate(async () => {
+      const link = [...document.querySelectorAll("a")].find((a) => a.textContent.trim() === "PDF");
+      const response = await fetch(link.href);
+      return { type: response.headers.get("content-type"), size: (await response.arrayBuffer()).byteLength };
+    });
     await visitor.close();
+    if (pdf.type !== "application/pdf" || pdf.size < 5000) throw new Error(JSON.stringify(pdf));
+    return `team standings PDF ${Math.round(pdf.size / 1024)} KB`;
   });
 
   await step("admin adds a time by hand, then voids it with a reason", async () => {
