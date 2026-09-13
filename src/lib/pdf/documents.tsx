@@ -62,12 +62,20 @@ export type NavigationRow = RiderFields & {
   points: number;
 };
 export type RoundRow = RiderFields & { position: number; total_points: number; day1_points: number; day2_points: number };
+export type RoundTimeRow = RiderFields & {
+  position: number | null;
+  total_s: number | null;
+  gap_s: number | null;
+  penalty_s: number;
+  result_status: string;
+};
 export type EnduroRow = RiderFields & { position: number | null; heat_points: number; points: number };
 export type SessionRow = { entry_id: number; class_id: number; kind: string; number: number; laps: number; points: number; result_status: string };
 
 export type Snapshot =
   | { kind: "navigation"; rows: NavigationRow[]; event: SnapshotEvent; stage: SnapshotStage; classes: SnapshotClass[] }
   | { kind: "round"; rows: RoundRow[]; event: SnapshotEvent; stage: null; classes: SnapshotClass[] }
+  | { kind: "round_time"; rows: RoundTimeRow[]; event: SnapshotEvent; stage: null; classes: SnapshotClass[] }
   | { kind: "enduro_cross"; rows: EnduroRow[]; sessions: SessionRow[]; event: SnapshotEvent; stage: SnapshotStage; classes: SnapshotClass[] };
 
 export type PublicationInfo = {
@@ -266,6 +274,33 @@ export function ResultsDocument({
               { label: r.total, width: 52, align: "right", bold: true, render: (x) => (x.total_s != null && x.result_status !== "dnf" ? formatDuration(x.total_s, { tenths: true }) : "") },
               { label: r.gap, width: 42, align: "right", render: (x) => (x.result_status === "classified" ? formatGap(x.gap_s) : "") },
               { label: r.points, width: 22, align: "right", bold: true, render: (x) => (x.points ? `${x.points}` : "") },
+            ]}
+          />
+        )}
+      />
+    );
+  } else if (snapshot.kind === "round_time") {
+    title = dict.pdf.round;
+    body = (
+      <ClassSections
+        lang={lang}
+        classes={snapshot.classes}
+        rows={snapshot.rows}
+        sort={(a, b) =>
+          STATUS_ORDER.indexOf(a.result_status) - STATUS_ORDER.indexOf(b.result_status) ||
+          (a.position ?? 0) - (b.position ?? 0) ||
+          a.race_number - b.race_number
+        }
+        table={(rows) => (
+          <Table<RoundTimeRow>
+            rows={rows}
+            columns={[
+              { label: r.pos, width: 26, align: "right", bold: true, render: (x) => (x.result_status === "classified" ? `${x.position}` : status(x.result_status)) },
+              { label: r.number, width: 30, align: "right", render: (x) => `${x.race_number}` },
+              { label: r.rider, render: riderCell(lang) },
+              { label: dict.pdf.penalty, width: 46, align: "right", render: (x) => (x.penalty_s ? `+${formatDuration(x.penalty_s)}` : "") },
+              { label: r.total, width: 60, align: "right", bold: true, render: (x) => (x.result_status === "classified" ? formatDuration(x.total_s, { tenths: true }) : "") },
+              { label: r.gap, width: 50, align: "right", render: (x) => (x.result_status === "classified" ? formatGap(x.gap_s) : "") },
             ]}
           />
         )}

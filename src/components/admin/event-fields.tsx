@@ -10,6 +10,7 @@ type EventValues = {
   season_id?: number | null;
   round_number?: number | null;
   status?: string;
+  ranking?: string;
 };
 
 export function EventFields({
@@ -34,6 +35,12 @@ export function EventFields({
       />
       <TextField label={f.dateFrom} name="date_from" type="date" required defaultValue={values.date_from} />
       <TextField label={f.dateTo} name="date_to" type="date" required defaultValue={values.date_to} />
+      <SelectField
+        label={f.ranking}
+        name="ranking"
+        defaultValue={values.ranking ?? "points"}
+        options={Object.entries(dict.admin.ranking).map(([value, label]) => ({ value, label }))}
+      />
       <SelectField
         label={f.kind}
         name="kind"

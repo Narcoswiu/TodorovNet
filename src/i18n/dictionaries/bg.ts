@@ -214,6 +214,11 @@ export const bg = {
       noSeason: "Без сезон",
       round: "Кръг №",
       status: "Статус",
+      ranking: "Общо класиране",
+    },
+    ranking: {
+      points: "По точки (BG-X)",
+      time: "По общо време",
     },
     kind: {
       championship_round: "Кръг от шампионат",

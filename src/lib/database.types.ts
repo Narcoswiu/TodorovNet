@@ -323,6 +323,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["event_kind"]
           location: string
           name: string
+          ranking: string
           round_number: number | null
           season_id: number | null
           status: Database["public"]["Enums"]["event_status"]
@@ -337,6 +338,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["event_kind"]
           location?: string
           name: string
+          ranking?: string
           round_number?: number | null
           season_id?: number | null
           status?: Database["public"]["Enums"]["event_status"]
@@ -351,6 +353,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["event_kind"]
           location?: string
           name?: string
+          ranking?: string
           round_number?: number | null
           season_id?: number | null
           status?: Database["public"]["Enums"]["event_status"]
@@ -429,6 +432,13 @@ export type Database = {
             columns: ["entry_id", "event_id"]
             isOneToOne: false
             referencedRelation: "round_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "laps_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
             referencedColumns: ["entry_id", "event_id"]
           },
           {
@@ -533,6 +543,13 @@ export type Database = {
             referencedColumns: ["entry_id", "event_id"]
           },
           {
+            foreignKeyName: "passings_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
             foreignKeyName: "passings_stage_id_event_id_fkey"
             columns: ["stage_id", "event_id"]
             isOneToOne: false
@@ -623,6 +640,13 @@ export type Database = {
             columns: ["entry_id", "event_id"]
             isOneToOne: false
             referencedRelation: "round_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "penalties_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
             referencedColumns: ["entry_id", "event_id"]
           },
           {
@@ -832,6 +856,13 @@ export type Database = {
             referencedColumns: ["entry_id", "event_id"]
           },
           {
+            foreignKeyName: "protests_against_entry_id_event_id_fkey"
+            columns: ["against_entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
             foreignKeyName: "protests_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
@@ -857,6 +888,13 @@ export type Database = {
             columns: ["filed_by_entry_id", "event_id"]
             isOneToOne: false
             referencedRelation: "round_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "protests_filed_by_entry_id_event_id_fkey"
+            columns: ["filed_by_entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
             referencedColumns: ["entry_id", "event_id"]
           },
           {
@@ -1043,6 +1081,13 @@ export type Database = {
             referencedColumns: ["entry_id", "event_id"]
           },
           {
+            foreignKeyName: "rider_statuses_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
             foreignKeyName: "rider_statuses_session_id_event_id_fkey"
             columns: ["session_id", "event_id"]
             isOneToOne: false
@@ -1210,6 +1255,13 @@ export type Database = {
             columns: ["entry_id", "event_id"]
             isOneToOne: false
             referencedRelation: "round_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "session_riders_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
             referencedColumns: ["entry_id", "event_id"]
           },
           {
@@ -1518,6 +1570,13 @@ export type Database = {
             referencedColumns: ["entry_id", "event_id"]
           },
           {
+            foreignKeyName: "start_slots_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
             foreignKeyName: "start_slots_stage_id_event_id_fkey"
             columns: ["stage_id", "event_id"]
             isOneToOne: false
@@ -1587,6 +1646,13 @@ export type Database = {
             columns: ["entry_id", "event_id"]
             isOneToOne: false
             referencedRelation: "round_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "time_adjustments_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
             referencedColumns: ["entry_id", "event_id"]
           },
           {
@@ -1745,6 +1811,13 @@ export type Database = {
             referencedColumns: ["entry_id", "event_id"]
           },
           {
+            foreignKeyName: "passings_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "round_time_results"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
             foreignKeyName: "passings_stage_id_event_id_fkey"
             columns: ["stage_id", "event_id"]
             isOneToOne: false
@@ -1772,6 +1845,45 @@ export type Database = {
           race_number: number | null
           rider_id: number | null
           total_points: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entries_event_id_class_id_fkey"
+            columns: ["event_id", "class_id"]
+            isOneToOne: false
+            referencedRelation: "event_classes"
+            referencedColumns: ["event_id", "class_id"]
+          },
+          {
+            foreignKeyName: "entries_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entries_rider_id_fkey"
+            columns: ["rider_id"]
+            isOneToOne: false
+            referencedRelation: "riders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      round_time_results: {
+        Row: {
+          class_id: number | null
+          entry_id: number | null
+          event_id: number | null
+          gap_s: number | null
+          penalty_s: number | null
+          position: number | null
+          race_number: number | null
+          result_status: string | null
+          rider_id: number | null
+          stage_count: number | null
+          stages_classified: number | null
+          total_s: number | null
         }
         Relationships: [
           {

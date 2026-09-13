@@ -31,9 +31,12 @@ export type NavigationRow = Tables<"navigation_results"> & {
 export type StageView =
   | { kind: "navigation"; rows: NavigationRow[] }
   | { kind: "enduro_cross"; overall: Tables<"enduro_cross_results">[]; sessions: Tables<"session_results">[] }
-  | { kind: "round"; rows: Tables<"round_results">[] };
+  | { kind: "round"; rows: Tables<"round_results">[] }
+  | { kind: "round_time"; rows: Tables<"round_time_results">[] };
 
-export type StageSelector = { kind: "navigation" | "enduro_cross"; stageId: number } | { kind: "round" };
+export type StageSelector =
+  | { kind: "navigation" | "enduro_cross"; stageId: number }
+  | { kind: "round"; ranking?: "points" | "time" };
 
 export type StartSlot = { position: number; scheduled_start: string; entry_id: number };
 
@@ -77,6 +80,12 @@ export async function loadEntries(supabase: Client, eventId: number): Promise<En
 }
 
 export async function loadView(supabase: Client, eventId: number, selector: StageSelector): Promise<StageView> {
+  if (selector.kind === "round" && selector.ranking === "time") {
+    const { data, error } = await supabase.from("round_time_results").select("*").eq("event_id", eventId);
+    if (error) throw error;
+    return { kind: "round_time", rows: data ?? [] };
+  }
+
   if (selector.kind === "round") {
     const { data, error } = await supabase.from("round_results").select("*").eq("event_id", eventId);
     if (error) throw error;

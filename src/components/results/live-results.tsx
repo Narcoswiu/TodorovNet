@@ -38,12 +38,13 @@ export function LiveResults({ lang, dict, eventId, selector, initialView, classe
 
   const selectorKind = selector.kind;
   const stageId = selector.kind === "round" ? null : selector.stageId;
+  const ranking = selector.kind === "round" ? selector.ranking : undefined;
 
   // Push, not polling: any timing change for this event triggers one debounced refetch.
   useEffect(() => {
     let debounce: ReturnType<typeof setTimeout> | undefined;
     const current: StageSelector =
-      selectorKind === "round" || stageId == null ? { kind: "round" } : { kind: selectorKind, stageId };
+      selectorKind === "round" || stageId == null ? { kind: "round", ranking } : { kind: selectorKind, stageId };
 
     const refresh = async () => {
       try {
@@ -72,7 +73,7 @@ export function LiveResults({ lang, dict, eventId, selector, initialView, classe
       clearInterval(tick);
       supabase.removeChannel(channel);
     };
-  }, [supabase, eventId, selectorKind, stageId]);
+  }, [supabase, eventId, selectorKind, stageId, ranking]);
 
   const entryById = useMemo(() => new Map(entries.map((entry) => [entry.id, entry])), [entries]);
   const visibleClasses = classFilter == null ? classes : classes.filter((c) => c.id === classFilter);
@@ -112,6 +113,8 @@ export function LiveResults({ lang, dict, eventId, selector, initialView, classe
             <NavigationTable rows={view.rows.filter((row) => row.class_id === cls.id)} {...{ lang, dict, entryById, cls }} />
           ) : view.kind === "enduro_cross" ? (
             <EnduroCrossTable view={view} {...{ lang, dict, entryById, cls }} />
+          ) : view.kind === "round_time" ? (
+            <RoundTimeTable rows={view.rows.filter((row) => row.class_id === cls.id)} {...{ lang, dict, entryById, cls }} />
           ) : (
             <RoundTable rows={view.rows.filter((row) => row.class_id === cls.id)} {...{ lang, dict, entryById, cls }} />
           );
@@ -272,6 +275,45 @@ function RoundTable({
           <td className="py-2 pr-2 text-right text-sm tabular-nums">{row.day1_points || ""}</td>
           <td className="py-2 pr-2 text-right text-sm tabular-nums">{row.day2_points || ""}</td>
           <td className="py-2 text-right font-semibold tabular-nums">{row.total_points || ""}</td>
+        </tr>
+      ))}
+    </Table>
+  );
+}
+
+/** Free events ranked by the sum of navigation totals; unfinished riders listed with their status. */
+function RoundTimeTable({
+  rows,
+  lang,
+  dict,
+  entryById,
+  cls,
+}: TableProps & { rows: Extract<StageView, { kind: "round_time" }>["rows"] }) {
+  if (!rows.length) return <Empty dict={dict} />;
+  const sorted = [...rows].sort(
+    (a, b) =>
+      STATUS_ORDER.indexOf(a.result_status ?? "") - STATUS_ORDER.indexOf(b.result_status ?? "") ||
+      (a.position ?? 0) - (b.position ?? 0) ||
+      (a.race_number ?? 0) - (b.race_number ?? 0),
+  );
+  return (
+    <Table head={[dict.results.pos, dict.results.number, dict.results.rider, dict.results.total, dict.results.gap]}>
+      {sorted.map((row) => (
+        <tr key={row.entry_id} className="border-t border-border">
+          <td className="py-2 pr-2 text-right font-medium tabular-nums">
+            {row.result_status === "classified" ? row.position : <StatusLabel status={row.result_status ?? ""} dict={dict} />}
+          </td>
+          <td className="py-2 pr-2">
+            <Plate cls={cls} number={row.race_number} />
+          </td>
+          <RiderCell entry={row.entry_id != null ? entryById.get(row.entry_id) : undefined} lang={lang} />
+          <td className="py-2 pr-2 text-right font-mono text-sm tabular-nums">
+            {row.result_status === "classified" ? formatDuration(row.total_s, { tenths: true }) : ""}
+            {(row.penalty_s ?? 0) > 0 && <div className="text-xs text-bad">+{formatDuration(row.penalty_s)}</div>}
+          </td>
+          <td className="py-2 text-right font-mono text-sm text-muted tabular-nums">
+            {row.result_status === "classified" ? formatGap(row.gap_s) : ""}
+          </td>
         </tr>
       ))}
     </Table>

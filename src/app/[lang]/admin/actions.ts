@@ -23,6 +23,7 @@ const eventFields = z.object({
   season_id: optionalInt,
   round_number: optionalInt,
   status: z.enum(["draft", "upcoming", "live", "finished"]),
+  ranking: z.enum(["points", "time"]),
 });
 
 export async function createEvent(_previous: ActionResult, formData: FormData): Promise<ActionResult> {

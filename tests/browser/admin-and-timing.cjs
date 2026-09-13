@@ -378,6 +378,19 @@ function cp1251(text) {
     if (Number(seconds) !== -900) throw new Error(`seconds ${seconds}`);
   });
 
+  await step("free event ranked by total time: setting saved, public overall tab switches to times", async () => {
+    await admin.goto(`${APP}/bg/admin/events/${eventId}/settings`, { waitUntil: "networkidle2" });
+    await submitForm(admin, "Запази", { ranking: "time" });
+    await waitText(admin, "Запазено.");
+    if (sql(`select ranking from events where id = ${eventId}`) !== "time") throw new Error("ranking not saved");
+    const visitor = await browser.newPage();
+    await visitor.goto(`${APP}/bg/e/${eventId}?stage=round`, { waitUntil: "networkidle2" });
+    await waitText(visitor, "Разлика");
+    const hasDayColumns = await visitor.evaluate(() => document.body.innerText.includes("Ден 1\t") || [...document.querySelectorAll("th")].some((th) => th.textContent.trim() === "Ден 1"));
+    await visitor.close();
+    if (hasDayColumns) throw new Error("overall tab still shows points per day");
+  });
+
   await step("English admin page renders translated", async () => {
     await admin.goto(`${APP}/en/admin/events/${eventId}/entries`, { waitUntil: "networkidle2" });
     await waitText(admin, "Import from Excel or CSV");

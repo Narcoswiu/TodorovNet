@@ -17,7 +17,7 @@ export default async function EventSettingsPage({ params }: PageProps<"/[lang]/a
   const [{ data: event }, { data: seasons }] = await Promise.all([
     viewer.supabase
       .from("events")
-      .select("id, name, location, date_from, date_to, kind, season_id, round_number, status")
+      .select("id, name, location, date_from, date_to, kind, season_id, round_number, status, ranking")
       .eq("id", eventId)
       .maybeSingle(),
     viewer.supabase.from("seasons").select("id, year, name").order("year", { ascending: false }),

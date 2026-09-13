@@ -215,6 +215,11 @@ export const en: Dictionary = {
       noSeason: "No season",
       round: "Round no.",
       status: "Status",
+      ranking: "Overall ranking",
+    },
+    ranking: {
+      points: "By points (BG-X)",
+      time: "By total time",
     },
     kind: {
       championship_round: "Championship round",

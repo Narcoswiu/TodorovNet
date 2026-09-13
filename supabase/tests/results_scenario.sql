@@ -414,6 +414,51 @@ begin
       'eligibility issues, got ' || v_issues;
   end;
 
+  -- ── Free event ranked by total time over two navigation days ──
+  declare
+    v_t_event bigint;
+    v_d1      bigint;
+    v_d2      bigint;
+    v_rider   bigint;
+    v_entries bigint[] := '{}';
+    v_entry   bigint;
+    v_t1      timestamptz := '2026-11-15 09:00:00+02';
+    v_t2      timestamptz := '2026-11-16 09:00:00+02';
+    v_pub     bigint;
+    v_order   text;
+  begin
+    insert into public.events (name, date_from, date_to, status, ranking) values ('Time ranking test', '2026-11-15', '2026-11-16', 'upcoming', 'time')
+    returning id into v_t_event;
+    insert into public.event_classes (event_id, class_id) values (v_t_event, v_pro);
+    insert into public.stages (event_id, day_number, type, name) values (v_t_event, 1, 'navigation', 'D1') returning id into v_d1;
+    insert into public.stages (event_id, day_number, type, name) values (v_t_event, 2, 'navigation', 'D2') returning id into v_d2;
+    insert into public.stage_classes (stage_id, event_id, class_id) values (v_d1, v_t_event, v_pro), (v_d2, v_t_event, v_pro);
+
+    for i in 1 .. 3 loop
+      insert into public.riders (first_name, last_name) values ('Time', 'Rider' || i) returning id into v_rider;
+      insert into public.entries (event_id, rider_id, class_id, race_number) values (v_t_event, v_rider, v_pro, 70 + i) returning id into v_entry;
+      v_entries := v_entries || v_entry;
+      insert into public.start_slots values (v_d1, v_t_event, v_entry, i, v_t1), (v_d2, v_t_event, v_entry, i, v_t2);
+    end loop;
+
+    -- #71: 3:00 + 3:30 = 6:30. #72: 2:50 + 3:30 = 6:20 (wins on time). #73: 2:00 on day 1, no finish on day 2.
+    insert into public.passings (client_id, event_id, stage_id, entry_id, point, passed_at) values
+      (gen_random_uuid(), v_t_event, v_d1, v_entries[1], 'finish', v_t1 + interval '3 hours'),
+      (gen_random_uuid(), v_t_event, v_d2, v_entries[1], 'finish', v_t2 + interval '3 hours 30 minutes'),
+      (gen_random_uuid(), v_t_event, v_d1, v_entries[2], 'finish', v_t1 + interval '2 hours 50 minutes'),
+      (gen_random_uuid(), v_t_event, v_d2, v_entries[2], 'finish', v_t2 + interval '3 hours 30 minutes'),
+      (gen_random_uuid(), v_t_event, v_d1, v_entries[3], 'finish', v_t1 + interval '2 hours');
+    insert into public.rider_statuses (event_id, stage_id, entry_id, status) values (v_t_event, v_d2, v_entries[3], 'dnf');
+
+    select string_agg(r.race_number || ':' || coalesce(r.position::text, r.result_status), ' ' order by r.race_number) into v_order
+    from public.round_time_results r where r.event_id = v_t_event;
+    assert v_order = '71:2 72:1 73:dnf', 'time ranking, got ' || v_order;
+    assert (select gap_s from public.round_time_results where entry_id = v_entries[1]) = 600, 'gap to the leader is 10 minutes';
+
+    v_pub := public.publish_results(v_t_event, null, 'provisional', 30);
+    assert (select snapshot ->> 'kind' from public.publications where id = v_pub) = 'round_time', 'time-ranked round final snapshot';
+  end;
+
   raise notice 'results scenario: all assertions passed';
 end;
 $$;

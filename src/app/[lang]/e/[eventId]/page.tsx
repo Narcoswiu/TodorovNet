@@ -15,7 +15,7 @@ async function loadEvent(eventId: number) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("events")
-    .select("id, name, location, date_from, date_to, status, round_number, season_id, kind")
+    .select("id, name, location, date_from, date_to, status, round_number, season_id, kind, ranking")
     .eq("id", eventId)
     .maybeSingle();
   return data;
@@ -58,7 +58,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
 
   const selector: StageSelector = selectedStage
     ? { kind: selectedStage.type === "enduro_cross" ? "enduro_cross" : "navigation", stageId: selectedStage.id }
-    : { kind: "round" };
+    : { kind: "round", ranking: event.ranking === "time" ? "time" : "points" };
   const showStartList = viewParam === "start" && selectedStage?.type === "navigation";
   const [view, startSlots, { data: latestPublications }] = await Promise.all([
     showStartList ? null : loadView(supabase, eventId, selector),
