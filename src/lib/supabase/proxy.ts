@@ -2,8 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
 
-// Refreshes the auth session on every request and keeps signed-out users out of /admin.
+// Refreshes the auth session on every request and keeps signed-out users out of /{lang}/admin.
 // This is only an optimistic check: the database (RLS) is what actually authorizes.
+// The timing app (/{lang}/t) is not redirected here: it must still open offline from the service worker.
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -29,9 +30,10 @@ export async function updateSession(request: NextRequest) {
 
   const { data } = await supabase.auth.getClaims();
 
-  if (!data?.claims && request.nextUrl.pathname.startsWith("/admin")) {
+  const [, lang, section] = request.nextUrl.pathname.split("/");
+  if (!data?.claims && section === "admin") {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = `/${lang}/login`;
     url.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(url);
   }

@@ -1,57 +1,180 @@
--- Reference data from the BG-X Правилник 2026 (docs/bgx-rules.md).
+-- LOCAL DEMO DATA ONLY. Applied by `supabase db reset`; never pushed to production.
+-- Reference data (classes, points, penalties) lives in migrations, not here.
+--
+-- Demo logins, password "demo-todorovnet":
+--   admin@demo.local  super admin and organizer
+--   timer@demo.local  timekeeper
+--   gps@demo.local    GPS judge
+--   jury@demo.local   jury and jury chair
 
-insert into public.points_scales (code, name, points) values
-  ('bgx_navigation_day1', 'Навигация ден 1 (места 1–20)',
-     array[25, 22, 20, 18, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]),
-  ('bgx_closed_course', 'Ендурокрос / навигация ден 2 (места 1–12)',
-     array[15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]),
-  ('bgx_team', 'Отборно класиране (места 1–25)',
-     array[30, 25, 22, 20, 18, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1, 1]);
+do $$
+declare
+  v_pw text := extensions.crypt('demo-todorovnet', extensions.gen_salt('bf'));
+  u    record;
+begin
+  for u in
+    select * from (values
+      ('10000000-0000-0000-0000-000000000001'::uuid, 'admin@demo.local', 'Демо Администратор'),
+      ('10000000-0000-0000-0000-000000000002'::uuid, 'timer@demo.local', 'Демо Хронометрист'),
+      ('10000000-0000-0000-0000-000000000003'::uuid, 'gps@demo.local',   'Демо GPS съдия'),
+      ('10000000-0000-0000-0000-000000000004'::uuid, 'jury@demo.local',  'Демо Жури')
+    ) as t (id, email, full_name)
+  loop
+    insert into auth.users (
+      instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+      raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+      confirmation_token, recovery_token, email_change, email_change_token_new
+    ) values (
+      '00000000-0000-0000-0000-000000000000', u.id, 'authenticated', 'authenticated', u.email, v_pw, now(),
+      '{"provider":"email","providers":["email"]}', jsonb_build_object('full_name', u.full_name), now(), now(),
+      '', '', '', ''
+    );
+    insert into auth.identities (id, user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
+    values (
+      gen_random_uuid(), u.id, u.id::text, 'email',
+      jsonb_build_object('sub', u.id::text, 'email', u.email, 'email_verified', true),
+      now(), now(), now()
+    );
+  end loop;
+end;
+$$;
 
-insert into public.seasons (year, name, drop_worst_rounds) values
-  (2026, 'BG-X Enduro Championship', 1);
+update public.profiles set is_super_admin = true where id = '10000000-0000-0000-0000-000000000001';
 
--- Р V p.3 (ages), Р VI.4 (race-number colours). Mini Junior colours are not stated in the rules.
-insert into public.classes (season_id, code, name, min_age, max_age, number_bg, number_fg, team_scoring, sort_order)
-select s.id, c.code, c.name, c.min_age, c.max_age, c.number_bg, c.number_fg, c.team_scoring, c.sort_order
-from public.seasons s
-cross join (values
-  ('pro',  'Про',              16, null, 'black',  'white', true,  1),
-  ('exp',  'Експерт',          14, null, 'red',    'white', true,  2),
-  ('std',  'Стандарт',         13, null, 'green',  'white', true,  3),
-  ('s40',  'Сеньор 40+',       40, null, 'blue',   'white', false, 4),
-  ('s50',  'Сеньор 50+',       50, null, 'white',  'blue',  false, 5),
-  ('wom',  'Жени',             12, null, 'purple', 'white', false, 6),
-  ('jst',  'Джуниър-Стандарт', 13, 18,   'white',  'green', false, 7),
-  ('jun',  'Джуниър',          11, 14,   'white',  'green', false, 8),
-  ('mjun', 'Мини Джуниър',      7, 10,   null,     null,    false, 9),
-  ('adv',  'Адвенчър',         23, null, 'white',  'black', false, 10)
-) as c (code, name, min_age, max_age, number_bg, number_fg, team_scoring, sort_order)
-where s.year = 2026;
+-- Act as the demo admin so the authorization guards (penalty review, start list) accept the seed.
+select set_config('request.jwt.claims', '{"sub":"10000000-0000-0000-0000-000000000001","role":"authenticated"}', false);
 
--- Default penalty catalogue, Р XIX and Appendix 4. Where the rulebook says only "дисквалификация"
--- without a scope, the scope below is a default the jury can change per event.
-insert into public.penalty_types (code, name, rule_ref, kind, seconds, unit_label, dsq_scope, fine_eur) values
-  ('track_dev_100_500',    'Отклонение от трака 100–500 м',               'Р XIX.4',  'time',          1800, null,           null,    null),
-  ('track_dev_500_1000',   'Отклонение от трака 500–1000 м',              'Р XIX.4',  'time',          7200, null,           null,    null),
-  ('track_dev_over_1000',  'Отклонение от трака над 1000 м',              'Р XIX.4',  'dsq',           null, null,           'stage', null),
-  ('gps_gap_100_500',      'Липса на GPS сигнал 100–500 м',               'Р XIX.4',  'time',          1800, null,           null,    null),
-  ('gps_gap_500_1000',     'Липса на GPS сигнал 500–1000 м',              'Р XIX.4',  'time',          7200, null,           null,    null),
-  ('gps_gap_over_1000',    'Липса на GPS сигнал над 1000 м',              'Р XIX.4',  'dsq',           null, null,           'stage', null),
-  ('bypass_mandatory',     'Заобикаляне на задължителен участък',          'Р XIX.7',  'time',          3600, null,           null,    null),
-  ('missed_control',       'Пропусната контрола',                         'Р XIX.8',  'time',          3600, null,           null,    null),
-  ('speeding',             'Превишена скорост (пикова GPS стойност)',      'Р XIX.9',  'time_per_unit',   60, 'км/ч над 50',  null,    null),
-  ('ex_missed_obstacle',   'Непреминато препятствие (ендурокрос)',         'Р XIX.15', 'time',            30, null,           null,    null),
-  ('tape_exit_closed',     'Излизане от лентите на затворения кръг',       'Р XIX.16', 'time',           900, null,           null,    null),
-  ('numbers_invalid',      'Неизрядни състезателни номера',                'Р VI.6',   'dsq',           null, null,           'stage', null),
-  ('start_despite_tech',   'Стартирал въпреки забрана на техническото лице','Р X.5',   'dnf',           null, null,           null,    null),
-  ('bike_change',          'Смяна на мотор по време на състезателен ден',  'Р XIX.6',  'dsq',           null, null,           'stage', null),
-  ('refuel_violation',     'Зареждане извън зоната или с работещ двигател','Р XV.3',   'dsq',           null, null,           'stage', null),
-  ('smoking_refuel',       'Пушене в зоната за зареждане',                 'Р XIX.18', 'dsq',           null, null,           'stage', null),
-  ('ex_outside_help',      'Непозволена помощ на ендурокрос трасето',      'Р XIX.13', 'dsq',           null, null,           'session', null),
-  ('dangerous_riding',     'Опасно каране, предизвикало произшествие',     'Р XIX.17', 'dsq',           null, null,           'event', null),
-  ('abusive_conduct',      'Непристойно поведение',                        'Р XIX.20', 'dsq',           null, null,           'event', null),
-  ('left_course_unreported','Напуснал трасето без да уведоми',             'Р XIX.21', 'dsq',           null, null,           'event_and_next_round', null),
-  ('paddock_speeding',     'Над 20 км/ч в падока',                         'Прил. 4',  'dsq',           null, null,           'event', null),
-  ('radio_contact',        'Електронна връзка с отбора по време на сесия', 'Прил. 4',  'dsq',           null, null,           'event', null),
-  ('washing_outside',      'Миене или изливане на масло извън определените места', 'Прил. 4', 'fine', null, null,         null,    50);
+do $$
+declare
+  v_season  bigint := (select id from public.seasons where year = 2026);
+  v_event   bigint;
+  v_nav     bigint;
+  v_ex      bigint;
+  v_clubs   bigint[];
+  v_timer   uuid := '10000000-0000-0000-0000-000000000002';
+  v_gps     uuid := '10000000-0000-0000-0000-000000000003';
+  v_first   timestamptz := date_trunc('minute', now()) - interval '4 hours';
+  v_num     int := 0;
+  v_rider   bigint;
+  v_at      timestamptz;
+  cls       record;
+  s         record;
+  male_first   text[] := array['Иван','Георги','Димитър','Николай','Петър','Стоян','Христо','Васил','Александър','Мартин','Тодор','Калоян','Борислав','Емил','Радослав'];
+  male_last    text[] := array['Иванов','Георгиев','Димитров','Николов','Петров','Стоянов','Христов','Василев','Александров','Маринов','Тодоров','Колев','Божинов','Енчев','Радев'];
+  female_first text[] := array['Мария','Елена','Десислава','Никол','Петя','Гергана','Ивана','Виктория'];
+  female_last  text[] := array['Иванова','Георгиева','Димитрова','Николова','Петрова','Стоянова','Христова','Колева'];
+begin
+  insert into public.clubs (name) values ('Демо МК Габрово'), ('Демо МК Враца'), ('Демо МК Банско'), ('Демо МК Кирково');
+  select array_agg(id order by id) into v_clubs from public.clubs where name like 'Демо%';
+
+  insert into public.events (season_id, kind, round_number, name, location, date_from, date_to, status)
+  values (v_season, 'championship_round', 10, 'Демо Хард Ендуро', 'Кирково', current_date, current_date + 1, 'live')
+  returning id into v_event;
+
+  insert into public.event_staff (event_id, user_id, role) values
+    (v_event, '10000000-0000-0000-0000-000000000001', 'organizer'),
+    (v_event, v_timer, 'timekeeper'),
+    (v_event, v_gps,   'gps_judge'),
+    (v_event, '10000000-0000-0000-0000-000000000004', 'jury'),
+    (v_event, '10000000-0000-0000-0000-000000000004', 'jury_chair');
+
+  insert into public.event_classes (event_id, class_id, start_order)
+  select v_event, c.id, c.sort_order
+  from public.classes c
+  where c.season_id = v_season and c.code in ('pro', 'exp', 'std', 's40', 'wom');
+
+  -- Day 1: navigation. Pro 1 rider per 30 s, other classes 2 per 30 s with a 3-minute gap.
+  insert into public.stages (event_id, day_number, sort_order, type, name, points_scale,
+                             first_start_at, start_interval_seconds, riders_per_slot, course_closes_at)
+  values (v_event, 1, 1, 'navigation', 'Ден 1 · Навигация', 'bgx_navigation_day1',
+          v_first, 30, 2, v_first + interval '7 hours')
+  returning id into v_nav;
+
+  insert into public.stage_classes (stage_id, event_id, class_id, start_order, riders_per_slot, gap_before_seconds, distance_km)
+  select v_nav, v_event, ec.class_id, ec.start_order,
+         case when c.code = 'pro' then 1 end,
+         case when c.code = 'pro' then 0 else 180 end,
+         case when c.code = 'wom' then 33 else 62 end
+  from public.event_classes ec
+  join public.classes c on c.id = ec.class_id
+  where ec.event_id = v_event;
+
+  insert into public.checkpoints (stage_id, event_id, code, name, sort_order) values
+    (v_nav, v_event, 'CP1', 'Контрола 1', 1),
+    (v_nav, v_event, 'CP2', 'Контрола 2 · зареждане', 2);
+
+  for cls in
+    select c.id, c.code, c.sort_order
+    from public.classes c
+    join public.event_classes ec on ec.class_id = c.id and ec.event_id = v_event
+    order by c.sort_order
+  loop
+    for i in 1 .. 8 loop
+      v_num := v_num + 1;
+      if cls.code = 'wom' then
+        insert into public.riders (first_name, last_name, club_id)
+        values (female_first[1 + (v_num * 5) % 8], female_last[1 + (v_num * 3) % 8], v_clubs[1 + v_num % 4])
+        returning id into v_rider;
+      else
+        insert into public.riders (first_name, last_name, club_id)
+        values (male_first[1 + (v_num * 7) % 15], male_last[1 + (v_num * 11) % 15], v_clubs[1 + v_num % 4])
+        returning id into v_rider;
+      end if;
+      insert into public.entries (event_id, rider_id, class_id, race_number)
+      values (v_event, v_rider, cls.id, cls.sort_order * 100 + i);
+    end loop;
+  end loop;
+
+  perform public.generate_start_list(v_nav);
+
+  -- Simulated race in progress: control passings and finishes that are already in the past.
+  for s in select * from public.start_slots where stage_id = v_nav order by position loop
+    v_at := s.scheduled_start + interval '50 minutes' + make_interval(secs => (s.position * 23) % 600);
+    if v_at <= now() then
+      insert into public.passings (client_id, event_id, stage_id, entry_id, point, checkpoint_id, passed_at, recorded_by)
+      values (gen_random_uuid(), v_event, v_nav, s.entry_id, 'checkpoint',
+              (select id from public.checkpoints where stage_id = v_nav and code = 'CP1'), v_at, v_timer);
+    end if;
+    v_at := s.scheduled_start + interval '1 hour 50 minutes' + make_interval(secs => (s.position * 29) % 900);
+    if v_at <= now() then
+      insert into public.passings (client_id, event_id, stage_id, entry_id, point, checkpoint_id, passed_at, recorded_by)
+      values (gen_random_uuid(), v_event, v_nav, s.entry_id, 'checkpoint',
+              (select id from public.checkpoints where stage_id = v_nav and code = 'CP2'), v_at, v_timer);
+    end if;
+    v_at := s.scheduled_start + interval '3 hours 15 minutes' + make_interval(secs => (s.position * 37) % 1800);
+    if v_at <= now() then
+      insert into public.passings (client_id, event_id, stage_id, entry_id, point, passed_at, recorded_by)
+      values (gen_random_uuid(), v_event, v_nav, s.entry_id, 'finish', v_at, v_timer);
+    end if;
+  end loop;
+
+  -- One confirmed and one proposed GPS penalty.
+  insert into public.penalties (event_id, stage_id, entry_id, penalty_type_id, note, created_by, status)
+  select v_event, v_nav, e.id, pt.id, 'Отклонение 320 м при WP 14', v_gps, 'confirmed'
+  from public.entries e, public.penalty_types pt
+  where e.event_id = v_event and e.race_number = 102 and pt.event_id is null and pt.code = 'track_dev_100_500';
+
+  insert into public.penalties (event_id, stage_id, entry_id, penalty_type_id, note, created_by)
+  select v_event, v_nav, e.id, pt.id, 'Няма запис на CP2', v_gps
+  from public.entries e, public.penalty_types pt
+  where e.event_id = v_event and e.race_number = 205 and pt.event_id is null and pt.code = 'missed_control';
+
+  -- Day 2: enduro-cross, heats not started yet.
+  insert into public.stages (event_id, day_number, sort_order, type, name, points_scale)
+  values (v_event, 2, 2, 'enduro_cross', 'Ден 2 · Ендурокрос', 'bgx_closed_course')
+  returning id into v_ex;
+
+  insert into public.stage_classes (stage_id, event_id, class_id, start_order)
+  select v_ex, v_event, class_id, start_order from public.event_classes where event_id = v_event;
+
+  insert into public.sessions (event_id, stage_id, class_id, kind, number, duration_minutes)
+  select v_event, v_ex, ec.class_id, k.kind, k.number,
+         case when k.kind = 'qualifying' then 20 when c.code = 'pro' then 10 when c.code in ('exp', 's40') then 8 else 7 end
+  from public.event_classes ec
+  join public.classes c on c.id = ec.class_id
+  cross join (values ('qualifying'::public.session_kind, 1), ('heat', 1), ('heat', 2)) as k (kind, number)
+  where ec.event_id = v_event;
+end;
+$$;
+
+select set_config('request.jwt.claims', '', false);

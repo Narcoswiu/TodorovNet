@@ -9,6 +9,9 @@ insert into auth.users (id, email, aud, role) values
 update public.profiles set is_super_admin = true where id = '00000000-0000-0000-0000-000000000001';
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
 
+-- Isolate from local demo data: the season maths must only see this scenario's rounds. Rolled back at the end.
+delete from public.events;
+
 -- A navigation-only round: riders finish in the given order, one minute apart.
 create function pg_temp.nav_round(p_round int, p_riders bigint[])
 returns bigint
@@ -191,6 +194,37 @@ begin
   assert got.position = 1, 'voided finish removes e2 from the classification';
   assert (select count(*) from public.audit_log where table_name = 'passings' and action = 'update') = 1,
     'void is written to the audit log';
+
+  -- ── Start-list generator: Pro 1 per 30 s, Expert 2 per 30 s after a 2-minute gap ──
+  declare
+    v_sl_event bigint;
+    v_sl_stage bigint;
+    v_exp      bigint := (select id from public.classes where season_id = v_season and code = 'exp');
+    v_start    timestamptz := '2026-11-01 10:00:00+02';
+    v_rider    bigint;
+    slots      text;
+  begin
+    insert into public.events (name, date_from, date_to, status) values ('Start list test', '2026-11-01', '2026-11-01', 'upcoming')
+    returning id into v_sl_event;
+    insert into public.event_classes (event_id, class_id, start_order) values (v_sl_event, v_pro, 1), (v_sl_event, v_exp, 2);
+    for i in 1 .. 5 loop
+      insert into public.riders (first_name, last_name) values ('Start', 'Rider' || i) returning id into v_rider;
+      insert into public.entries (event_id, rider_id, class_id, race_number)
+      values (v_sl_event, v_rider, case when i <= 2 then v_pro else v_exp end, 10 + i);
+    end loop;
+    insert into public.stages (event_id, day_number, type, name, first_start_at, start_interval_seconds, riders_per_slot)
+    values (v_sl_event, 1, 'navigation', 'Nav', v_start, 30, 2) returning id into v_sl_stage;
+    insert into public.stage_classes (stage_id, event_id, class_id, start_order, riders_per_slot, gap_before_seconds) values
+      (v_sl_stage, v_sl_event, v_pro, 1, 1, 0),
+      (v_sl_stage, v_sl_event, v_exp, 2, null, 120);
+
+    assert public.generate_start_list(v_sl_stage) = 5, 'start list places all five riders';
+    select string_agg(e.race_number || '@' || to_char(ss.scheduled_start at time zone 'Europe/Sofia', 'HH24:MI:SS'), ' ' order by ss.position)
+      into slots
+    from public.start_slots ss join public.entries e on e.id = ss.entry_id
+    where ss.stage_id = v_sl_stage;
+    assert slots = '11@10:00:00 12@10:00:30 13@10:03:00 14@10:03:00 15@10:03:30', 'start slots, got ' || slots;
+  end;
 
   raise notice 'results scenario: all assertions passed';
 end;

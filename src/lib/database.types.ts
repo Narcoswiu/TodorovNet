@@ -77,6 +77,7 @@ export type Database = {
           id: number
           is_mandatory: boolean
           name: string
+          name_en: string | null
           sort_order: number
           stage_id: number
         }
@@ -86,6 +87,7 @@ export type Database = {
           id?: never
           is_mandatory?: boolean
           name?: string
+          name_en?: string | null
           sort_order?: number
           stage_id: number
         }
@@ -95,6 +97,7 @@ export type Database = {
           id?: never
           is_mandatory?: boolean
           name?: string
+          name_en?: string | null
           sort_order?: number
           stage_id?: number
         }
@@ -122,6 +125,7 @@ export type Database = {
           max_age: number | null
           min_age: number | null
           name: string
+          name_en: string | null
           number_bg: string | null
           number_fg: string | null
           season_id: number | null
@@ -134,6 +138,7 @@ export type Database = {
           max_age?: number | null
           min_age?: number | null
           name: string
+          name_en?: string | null
           number_bg?: string | null
           number_fg?: string | null
           season_id?: number | null
@@ -146,6 +151,7 @@ export type Database = {
           max_age?: number | null
           min_age?: number | null
           name?: string
+          name_en?: string | null
           number_bg?: string | null
           number_fg?: string | null
           season_id?: number | null
@@ -645,6 +651,7 @@ export type Database = {
           id: number
           kind: Database["public"]["Enums"]["penalty_kind"]
           name: string
+          name_en: string | null
           rule_ref: string | null
           seconds: number | null
           unit_label: string | null
@@ -658,6 +665,7 @@ export type Database = {
           id?: never
           kind: Database["public"]["Enums"]["penalty_kind"]
           name: string
+          name_en?: string | null
           rule_ref?: string | null
           seconds?: number | null
           unit_label?: string | null
@@ -671,6 +679,7 @@ export type Database = {
           id?: never
           kind?: Database["public"]["Enums"]["penalty_kind"]
           name?: string
+          name_en?: string | null
           rule_ref?: string | null
           seconds?: number | null
           unit_label?: string | null
@@ -1294,6 +1303,7 @@ export type Database = {
           first_start_at: string | null
           id: number
           name: string
+          name_en: string | null
           points_scale: string | null
           riders_per_slot: number
           sort_order: number
@@ -1307,6 +1317,7 @@ export type Database = {
           first_start_at?: string | null
           id?: never
           name: string
+          name_en?: string | null
           points_scale?: string | null
           riders_per_slot?: number
           sort_order?: number
@@ -1320,6 +1331,7 @@ export type Database = {
           first_start_at?: string | null
           id?: never
           name?: string
+          name_en?: string | null
           points_scale?: string | null
           riders_per_slot?: number
           sort_order?: number
@@ -1760,6 +1772,7 @@ export type Database = {
     }
     Functions: {
       event_visible: { Args: { p_event_id: number }; Returns: boolean }
+      generate_start_list: { Args: { p_stage_id: number }; Returns: number }
       has_event_role: {
         Args: {
           p_event_id: number
@@ -1770,6 +1783,7 @@ export type Database = {
       is_any_organizer: { Args: never; Returns: boolean }
       is_event_staff: { Args: { p_event_id: number }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
+      server_time: { Args: never; Returns: string }
     }
     Enums: {
       dsq_scope: "session" | "stage" | "event" | "event_and_next_round"
