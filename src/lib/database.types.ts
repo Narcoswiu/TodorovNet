@@ -1307,6 +1307,63 @@ export type Database = {
           },
         ]
       }
+      stage_tracks: {
+        Row: {
+          class_id: number | null
+          event_id: number
+          id: number
+          length_m: number | null
+          mandatory_waypoints: string[]
+          name: string
+          point_count: number
+          stage_id: number
+          storage_path: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          class_id?: number | null
+          event_id: number
+          id?: never
+          length_m?: number | null
+          mandatory_waypoints?: string[]
+          name: string
+          point_count?: number
+          stage_id: number
+          storage_path: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          class_id?: number | null
+          event_id?: number
+          id?: never
+          length_m?: number | null
+          mandatory_waypoints?: string[]
+          name?: string
+          point_count?: number
+          stage_id?: number
+          storage_path?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stage_tracks_stage_id_event_id_fkey"
+            columns: ["stage_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "navigation_results"
+            referencedColumns: ["stage_id", "event_id"]
+          },
+          {
+            foreignKeyName: "stage_tracks_stage_id_event_id_fkey"
+            columns: ["stage_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "stages"
+            referencedColumns: ["id", "event_id"]
+          },
+        ]
+      }
       stages: {
         Row: {
           course_closes_at: string | null
@@ -1835,6 +1892,7 @@ export type Database = {
       }
       restart_session: { Args: { p_session_id: number }; Returns: number }
       server_time: { Args: never; Returns: string }
+      storage_event_id: { Args: { p_name: string }; Returns: number }
     }
     Enums: {
       dsq_scope: "session" | "stage" | "event" | "event_and_next_round"

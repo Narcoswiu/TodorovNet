@@ -488,6 +488,54 @@ function cp1251(text) {
     return "status upheld, refunded, deadline set";
   });
 
+  // ───────────── GPS judge: official track, rider log, penalty with evidence ─────────────
+  await step("GPS check: finds a 300 m deviation and proposes the penalty with map and track evidence", async () => {
+    const LAT = 41.33;
+    const LON = 25.36;
+    const toLon = (m) => m / (111195 * Math.cos((LAT * Math.PI) / 180));
+    const toLat = (m) => m / 111195;
+    const gpxDoc = (body, waypoints = "") =>
+      `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="test">${waypoints}<trk><trkseg>${body}</trkseg></trk></gpx>`;
+    const officialBody = Array.from({ length: 101 }, (_, i) => `<trkpt lat="${LAT}" lon="${(LON + toLon(i * 50)).toFixed(7)}"/>`).join("");
+    const start = Date.parse("2026-09-26T07:00:00Z");
+    const riderBody = Array.from({ length: 501 }, (_, i) => {
+      const metres = i * 10;
+      const north = metres >= 2000 && metres <= 2600 ? 300 : 4;
+      return `<trkpt lat="${(LAT + toLat(north)).toFixed(7)}" lon="${(LON + toLon(metres)).toFixed(7)}"><time>${new Date(start + i * 2000).toISOString()}</time></trkpt>`;
+    }).join("");
+    const officialFile = path.join(OUT, `official-${stamp}.gpx`);
+    const riderFile = path.join(OUT, `rider-${stamp}.gpx`);
+    fs.writeFileSync(officialFile, gpxDoc(officialBody, `<wpt lat="${LAT}" lon="${(LON + toLon(1000)).toFixed(7)}"><name>SS_START 1</name></wpt>`));
+    fs.writeFileSync(riderFile, gpxDoc(riderBody));
+
+    await gps.goto(`${APP}/bg/admin/events/${demoEvent}/gps`, { waitUntil: "networkidle2" });
+    const officialInput = await gps.$('input[name="official_gpx"]');
+    await officialInput.uploadFile(officialFile);
+    await waitText(gps, "101 точки", 20000);
+
+    await gps.evaluate(() => {
+      const input = document.querySelector('input[name="gps_race_number"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "101");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const riderInput = await gps.$('input[name="rider_gpx"]');
+    await riderInput.uploadFile(riderFile);
+    await sleep(300);
+    await clickButton(gps, "Провери");
+    await waitText(gps, "Отклонение от трака", 20000);
+    await clickButton(gps, "Предложи наказание");
+    await waitText(gps, "Предложено. Журито трябва да го потвърди.", 30000);
+
+    const row = sql(
+      `select pt.code || '|' || p.status || '|' || p.evidence_url from penalties p join penalty_types pt on pt.id = p.penalty_type_id join entries e on e.id = p.entry_id where p.event_id = ${demoEvent} and e.race_number = 101 and p.note like 'GPS:%' order by p.id desc limit 1`,
+    );
+    const [code, status, evidenceUrl] = row.split("|");
+    if (code !== "track_dev_100_500" || status !== "proposed") throw new Error(row);
+    const image = await fetch(evidenceUrl);
+    if (!image.ok || image.headers.get("content-type") !== "image/png") throw new Error(`evidence ${image.status} ${image.headers.get("content-type")}`);
+    return `${code}, evidence PNG ${Math.round((await image.arrayBuffer()).byteLength / 1024)} KB`;
+  });
+
   // ───────────── Timekeeper: timing app, offline and back ─────────────
   const timerContext = await browser.createBrowserContext();
   let timer;
