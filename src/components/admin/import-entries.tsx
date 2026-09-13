@@ -3,10 +3,26 @@
 import { useState, useTransition } from "react";
 import { t, type Locale } from "@/i18n/config";
 import type { Dictionary } from "@/i18n/get-dictionary";
-import { importEntries } from "@/lib/admin/actions/entries";
 import { mapRows, readSpreadsheet, type ImportReport, type ImportRow } from "@/lib/admin/spreadsheet";
 
-export function ImportEntries({ lang, dict, eventId }: { lang: Locale; dict: Dictionary; eventId: number }) {
+type ImportAction = (
+  lang: string,
+  targetId: number,
+  rows: ImportRow[],
+) => Promise<{ ok: true; report: ImportReport } | { ok: false; error: string }>;
+
+/** Spreadsheet import shared by event entries and the season number registry: the action decides where rows go. */
+export function ImportEntries({
+  lang,
+  dict,
+  targetId,
+  action,
+}: {
+  lang: Locale;
+  dict: Dictionary;
+  targetId: number;
+  action: ImportAction;
+}) {
   const text = dict.admin.entries;
   const [rows, setRows] = useState<ImportRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +51,7 @@ export function ImportEntries({ lang, dict, eventId }: { lang: Locale; dict: Dic
   function run() {
     if (!rows) return;
     startTransition(async () => {
-      const result = await importEntries(lang, eventId, rows);
+      const result = await action(lang, targetId, rows);
       if (result.ok) {
         setReport(result.report);
         setRows(null);

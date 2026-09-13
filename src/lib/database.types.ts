@@ -2077,6 +2077,10 @@ export type Database = {
         Args: { p_event_id: number; p_rows: Json }
         Returns: Json
       }
+      import_season_numbers: {
+        Args: { p_rows: Json; p_season_id: number }
+        Returns: Json
+      }
       is_any_organizer: { Args: never; Returns: boolean }
       is_event_staff: { Args: { p_event_id: number }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }

@@ -38,12 +38,17 @@ export default async function AdminHomePage({ params }: PageProps<"/[lang]/admin
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold tracking-tight">{dict.admin.manageEvents}</h1>
         {viewer.isSuperAdmin && (
-          <Link
-            href={`/${lang}/admin/events/new`}
-            className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground"
-          >
-            + {dict.admin.newEvent}
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href={`/${lang}/admin/registry`} className="text-sm text-accent underline">
+              {dict.admin.registry.heading}
+            </Link>
+            <Link
+              href={`/${lang}/admin/events/new`}
+              className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground"
+            >
+              + {dict.admin.newEvent}
+            </Link>
+          </div>
         )}
       </div>
 

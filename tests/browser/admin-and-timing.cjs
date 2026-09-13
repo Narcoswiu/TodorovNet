@@ -353,6 +353,20 @@ function cp1251(text) {
     return `team standings PDF ${Math.round(pdf.size / 1024)} KB`;
   });
 
+  await step("number registry: register a number, public list and rider profile", async () => {
+    const seasonId = sql(`select id from seasons where year = 2026`);
+    await admin.goto(`${APP}/bg/admin/registry`, { waitUntil: "networkidle2" });
+    await submitForm(admin, "Регистрирай номер", { race_number: "777", first_name: "Регистър", last_name: `Тест${stamp}`, class: "pro", club: "Демо МК Враца" });
+    await waitText(admin, "Запазено.");
+    const visitor = await browser.newPage();
+    await visitor.goto(`${APP}/bg/s/${seasonId}/numbers`, { waitUntil: "networkidle2" });
+    await waitText(visitor, `Тест${stamp}`);
+    await visitor.evaluate((name) => [...document.querySelectorAll("a")].find((a) => a.textContent.includes(name)).click(), `Тест${stamp}`);
+    await visitor.waitForFunction(() => location.pathname.includes("/r/"), { timeout: 15000 });
+    await waitText(visitor, "Номер 777 · 2026");
+    await visitor.close();
+  });
+
   await step("admin adds a time by hand, then voids it with a reason", async () => {
     await admin.goto(`${APP}/bg/admin/events/${eventId}/timing?stage=${stageId}`, { waitUntil: "networkidle2" });
     await submitForm(admin, "Добави време ръчно", { race_number: "500", point: "finish", date: "2026-10-10", time: "13:05:07" });

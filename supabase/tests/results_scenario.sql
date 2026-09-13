@@ -459,6 +459,40 @@ begin
     assert (select snapshot ->> 'kind' from public.publications where id = v_pub) = 'round_time', 'time-ranked round final snapshot';
   end;
 
+  -- ── Season number registry: import, move a number, eligibility against the registry ──
+  declare
+    v_report  jsonb;
+    v_reg_ev  bigint;
+    v_rider   bigint;
+    v_issues  text;
+  begin
+    v_report := public.import_season_numbers(v_season, '[
+      {"race_number": "901", "first_name": "Регистър", "last_name": "Първи", "class": "pro", "club": "Registry MC"},
+      {"race_number": "902", "first_name": "Регистър", "last_name": "Втори", "class": "Expert"},
+      {"race_number": "903", "first_name": "Грешен", "last_name": "Клас", "class": "Мотокрос"}
+    ]'::jsonb);
+    assert (v_report ->> 'added')::int = 2 and jsonb_array_length(v_report -> 'errors') = 1, 'registry import, got ' || v_report;
+
+    -- Rider "Втори" takes number 901: the number moves, and his old 902 is released.
+    v_report := public.import_season_numbers(v_season, '[{"race_number": "901", "first_name": "Регистър", "last_name": "Втори", "class": "exp"}]'::jsonb);
+    assert (v_report ->> 'updated')::int = 1, 'number moved, got ' || v_report;
+    assert (select count(*) from public.season_numbers sn join public.riders r on r.id = sn.rider_id
+            where sn.season_id = v_season and r.last_name = 'Втори') = 1, 'one number per rider';
+    assert not exists (select 1 from public.season_numbers where season_id = v_season and race_number = 902), '902 released';
+
+    -- A championship event of that season: racing with someone else's number is flagged.
+    insert into public.events (season_id, kind, round_number, name, date_from, date_to, status)
+    values (v_season, 'championship_round', 99, 'Registry check', '2026-12-01', '2026-12-01', 'upcoming') returning id into v_reg_ev;
+    insert into public.event_classes (event_id, class_id) values (v_reg_ev, v_pro);
+    select id into v_rider from public.riders where last_name = 'Втори' and first_name = 'Регистър';
+    insert into public.entries (event_id, rider_id, class_id, race_number) values (v_reg_ev, v_rider, v_pro, 901);
+    select id into v_rider from public.riders where last_name = 'Първи' and first_name = 'Регистър';
+    insert into public.entries (event_id, rider_id, class_id, race_number) values (v_reg_ev, v_rider, v_pro, 555);
+    select string_agg(el.race_number || ':' || (el.issues @> array['number_not_registered'])::text, ' ' order by el.race_number)
+      into v_issues from public.entry_eligibility el where el.event_id = v_reg_ev;
+    assert v_issues = '555:true 901:false', 'registry eligibility, got ' || v_issues;
+  end;
+
   raise notice 'results scenario: all assertions passed';
 end;
 $$;

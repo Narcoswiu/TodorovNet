@@ -6,7 +6,7 @@ import { ImportEntries } from "@/components/admin/import-entries";
 import { hasLocale, t } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
 import { localizedName } from "@/i18n/localize";
-import { addEntry, setWithdrawn } from "@/lib/admin/actions/entries";
+import { addEntry, importEntries, setWithdrawn } from "@/lib/admin/actions/entries";
 import { requireViewer } from "@/lib/auth";
 
 export default async function EventEntriesPage({ params }: PageProps<"/[lang]/admin/events/[eventId]/entries">) {
@@ -65,7 +65,7 @@ export default async function EventEntriesPage({ params }: PageProps<"/[lang]/ad
       </Card>
 
       <Card title={text.import}>
-        <ImportEntries lang={lang} dict={dict} eventId={eventId} />
+        <ImportEntries lang={lang} dict={dict} targetId={eventId} action={importEntries} />
       </Card>
 
       <Card title={t(text.count, { n: active })}>

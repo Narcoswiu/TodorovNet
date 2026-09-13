@@ -144,6 +144,9 @@ export default async function SeasonPage({ params, searchParams }: PageProps<"/[
               {s.team}
             </Link>
           </nav>
+          <Link href={`/${lang}/s/${seasonId}/numbers`} className="text-sm text-accent underline">
+            {s.numbers}
+          </Link>
           {data.rounds.length > 0 && (
             <a
               href={`/api/pdf/season/${seasonId}?lang=${lang}${showTeams ? "&view=team" : ""}`}
