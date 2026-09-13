@@ -375,6 +375,45 @@ begin
     assert (select started_at is null and red_flag_decision = 'restart' from public.sessions where id = v_heat), 'heat reset';
   end;
 
+  -- ── Eligibility: ages, licence validity and type, club ──
+  declare
+    v_el_event bigint;
+    v_jun      bigint := (select id from public.classes where season_id = v_season and code = 'jun');
+    v_rider    bigint;
+    v_club2    bigint;
+    v_issues   text;
+  begin
+    insert into public.clubs (name) values ('Eligibility MC') on conflict (name) do update set name = excluded.name returning id into v_club2;
+    insert into public.events (name, date_from, date_to, status) values ('Eligibility test', '2026-06-06', '2026-06-07', 'upcoming')
+    returning id into v_el_event;
+    insert into public.event_classes (event_id, class_id) values (v_el_event, v_pro), (v_el_event, v_jun);
+
+    -- #1 Pro, 20 years old, valid A licence, club: clean.
+    insert into public.riders (first_name, last_name, club_id) values ('Ok', 'Pro', v_club2) returning id into v_rider;
+    insert into public.rider_private (rider_id, birth_date, license_type, license_valid_until) values (v_rider, '2006-01-01', 'enduro_a', '2026-12-31');
+    insert into public.entries (event_id, rider_id, class_id, race_number) values (v_el_event, v_rider, v_pro, 1);
+    -- #2 Pro, turns 16 only after the event, licence expires before day 2, PROMO licence.
+    insert into public.riders (first_name, last_name, club_id) values ('Young', 'Pro', v_club2) returning id into v_rider;
+    insert into public.rider_private (rider_id, birth_date, license_type, license_valid_until) values (v_rider, '2010-06-08', 'promo', '2026-06-06');
+    insert into public.entries (event_id, rider_id, class_id, race_number) values (v_el_event, v_rider, v_pro, 2);
+    -- #3 Junior (11–14) born 2011: turns 15 in 2026, so past the maximum for the whole year. No club.
+    insert into public.riders (first_name, last_name) values ('Old', 'Junior') returning id into v_rider;
+    insert into public.rider_private (rider_id, birth_date, license_type) values (v_rider, '2011-12-31', 'promo');
+    insert into public.entries (event_id, rider_id, class_id, race_number, club_id) values (v_el_event, v_rider, v_jun, 3, null);
+    -- #4 Junior born 2012: turns 14 in 2026, still eligible all year. Foreign rider, foreign licence, no club.
+    insert into public.riders (first_name, last_name, country) values ('Guest', 'Junior', 'RO') returning id into v_rider;
+    insert into public.rider_private (rider_id, birth_date, license_type) values (v_rider, '2012-12-31', 'foreign');
+    insert into public.entries (event_id, rider_id, class_id, race_number) values (v_el_event, v_rider, v_jun, 4);
+    -- #5 No personal data at all.
+    insert into public.riders (first_name, last_name, club_id) values ('Unknown', 'Rider', v_club2) returning id into v_rider;
+    insert into public.entries (event_id, rider_id, class_id, race_number) values (v_el_event, v_rider, v_pro, 5);
+
+    select string_agg(el.race_number || ':' || array_to_string(el.issues, ','), ' ' order by el.race_number) into v_issues
+    from public.entry_eligibility el where el.event_id = v_el_event;
+    assert v_issues = '1: 2:too_young,licence_expired,licence_class 3:too_old,no_club 4: 5:no_birth_date,no_licence',
+      'eligibility issues, got ' || v_issues;
+  end;
+
   raise notice 'results scenario: all assertions passed';
 end;
 $$;

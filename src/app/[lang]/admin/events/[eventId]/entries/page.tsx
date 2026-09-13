@@ -17,7 +17,7 @@ export default async function EventEntriesPage({ params }: PageProps<"/[lang]/ad
   const text = dict.admin.entries;
   const viewer = await requireViewer(lang, `/${lang}/admin/events/${eventId}/entries`);
 
-  const [{ data: entries }, { data: eventClasses }] = await Promise.all([
+  const [{ data: entries }, { data: eventClasses }, { data: eligibility }] = await Promise.all([
     viewer.supabase
       .from("entries")
       .select("id, race_number, withdrawn, class_id, riders(first_name, last_name, country), clubs(name)")
@@ -28,7 +28,12 @@ export default async function EventEntriesPage({ params }: PageProps<"/[lang]/ad
       .select("start_order, classes(id, code, name, name_en)")
       .eq("event_id", eventId)
       .order("start_order"),
+    // Only the organizer and jury get rows back: the checks read personal data.
+    viewer.supabase.from("entry_eligibility").select("entry_id, issues").eq("event_id", eventId),
   ]);
+  const issuesByEntry = new Map(
+    (eligibility ?? []).filter((row) => row.entry_id != null && row.issues?.length).map((row) => [row.entry_id as number, row.issues as string[]]),
+  );
   const classes = (eventClasses ?? []).flatMap((row) => (row.classes ? [row.classes] : []));
   const classById = new Map(classes.map((cls) => [cls.id, cls]));
   const active = (entries ?? []).filter((entry) => !entry.withdrawn).length;
@@ -64,6 +69,9 @@ export default async function EventEntriesPage({ params }: PageProps<"/[lang]/ad
       </Card>
 
       <Card title={t(text.count, { n: active })}>
+        {issuesByEntry.size > 0 && (
+          <p className="mb-3 rounded-md border border-warn px-3 py-2 text-sm text-warn">{t(text.issuesCount, { n: issuesByEntry.size })}</p>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-xs text-muted">
@@ -85,6 +93,15 @@ export default async function EventEntriesPage({ params }: PageProps<"/[lang]/ad
                       {entry.riders?.first_name} {entry.riders?.last_name}
                       {entry.riders?.country && entry.riders.country !== "BG" && (
                         <span className="ml-1 text-xs text-muted">{entry.riders.country}</span>
+                      )}
+                      {!entry.withdrawn && issuesByEntry.has(entry.id) && (
+                        <div className="mt-0.5 flex flex-wrap gap-1 no-underline">
+                          {issuesByEntry.get(entry.id)!.map((issue) => (
+                            <span key={issue} className="rounded bg-warn/15 px-1.5 py-0.5 text-[11px] text-warn">
+                              {text.issues[issue as keyof typeof text.issues] ?? issue}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </td>
                     <td className="py-2 pr-2">{cls ? localizedName(cls, lang) : ""}</td>

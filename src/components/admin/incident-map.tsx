@@ -23,7 +23,12 @@ export function IncidentMap({
   title: string;
 }) {
   const project = makeProjection({ lat: incident.lat, lon: incident.lon });
-  const section = rider.slice(incident.startIndex, incident.endIndex + 1).map(project);
+  // Frame the offending section plus some log before and after it, so the map shows where the rider
+  // left the official track and where they came back, not only the part that was off track.
+  const CONTEXT_POINTS = 15;
+  const section = rider
+    .slice(Math.max(0, incident.startIndex - CONTEXT_POINTS), Math.min(rider.length, incident.endIndex + 1 + CONTEXT_POINTS))
+    .map(project);
   section.push(project({ lat: incident.lat, lon: incident.lon }));
 
   const xs = section.map((p) => p.x);

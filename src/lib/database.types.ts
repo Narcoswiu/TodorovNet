@@ -421,6 +421,13 @@ export type Database = {
             foreignKeyName: "laps_entry_id_event_id_fkey"
             columns: ["entry_id", "event_id"]
             isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "laps_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
             referencedRelation: "round_results"
             referencedColumns: ["entry_id", "event_id"]
           },
@@ -515,6 +522,13 @@ export type Database = {
             foreignKeyName: "passings_entry_id_event_id_fkey"
             columns: ["entry_id", "event_id"]
             isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "passings_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
             referencedRelation: "round_results"
             referencedColumns: ["entry_id", "event_id"]
           },
@@ -596,6 +610,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "entries"
             referencedColumns: ["id", "event_id"]
+          },
+          {
+            foreignKeyName: "penalties_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
           },
           {
             foreignKeyName: "penalties_entry_id_event_id_fkey"
@@ -800,6 +821,13 @@ export type Database = {
             foreignKeyName: "protests_against_entry_id_event_id_fkey"
             columns: ["against_entry_id", "event_id"]
             isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "protests_against_entry_id_event_id_fkey"
+            columns: ["against_entry_id", "event_id"]
+            isOneToOne: false
             referencedRelation: "round_results"
             referencedColumns: ["entry_id", "event_id"]
           },
@@ -816,6 +844,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "entries"
             referencedColumns: ["id", "event_id"]
+          },
+          {
+            foreignKeyName: "protests_filed_by_entry_id_event_id_fkey"
+            columns: ["filed_by_entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
           },
           {
             foreignKeyName: "protests_filed_by_entry_id_event_id_fkey"
@@ -997,6 +1032,13 @@ export type Database = {
             foreignKeyName: "rider_statuses_entry_id_event_id_fkey"
             columns: ["entry_id", "event_id"]
             isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "rider_statuses_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
             referencedRelation: "round_results"
             referencedColumns: ["entry_id", "event_id"]
           },
@@ -1155,6 +1197,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "entries"
             referencedColumns: ["id", "event_id"]
+          },
+          {
+            foreignKeyName: "session_riders_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
           },
           {
             foreignKeyName: "session_riders_entry_id_event_id_fkey"
@@ -1458,6 +1507,13 @@ export type Database = {
             foreignKeyName: "start_slots_entry_id_event_id_fkey"
             columns: ["entry_id", "event_id"]
             isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
+          },
+          {
+            foreignKeyName: "start_slots_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
             referencedRelation: "round_results"
             referencedColumns: ["entry_id", "event_id"]
           },
@@ -1518,6 +1574,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "entries"
             referencedColumns: ["id", "event_id"]
+          },
+          {
+            foreignKeyName: "time_adjustments_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
           },
           {
             foreignKeyName: "time_adjustments_entry_id_event_id_fkey"
@@ -1588,6 +1651,24 @@ export type Database = {
           },
         ]
       }
+      entry_eligibility: {
+        Row: {
+          class_code: string | null
+          entry_id: number | null
+          event_id: number | null
+          issues: string[] | null
+          race_number: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entries_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       navigation_results: {
         Row: {
           actual_start: string | null
@@ -1648,6 +1729,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "entries"
             referencedColumns: ["id", "event_id"]
+          },
+          {
+            foreignKeyName: "passings_entry_id_event_id_fkey"
+            columns: ["entry_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "entry_eligibility"
+            referencedColumns: ["entry_id", "event_id"]
           },
           {
             foreignKeyName: "passings_entry_id_event_id_fkey"

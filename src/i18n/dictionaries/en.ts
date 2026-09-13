@@ -349,6 +349,16 @@ export const en: Dictionary = {
       missingColumns: "Required columns are missing: {columns}",
       unreadable: "The file could not be read. Use .xlsx or .csv.",
       noClasses: "Choose the classes first, in the “Classes” tab.",
+      issuesCount: "{n} entries for the organizer to check",
+      issues: {
+        no_birth_date: "no date of birth",
+        too_young: "below the minimum age",
+        too_old: "above the maximum age",
+        no_licence: "no licence",
+        licence_expired: "licence expires before the end",
+        licence_class: "licence does not cover this class",
+        no_club: "no club",
+      },
     },
     stages: {
       add: "New stage",

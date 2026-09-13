@@ -207,6 +207,16 @@ function cp1251(text) {
     await admin.waitForFunction(() => [...document.querySelectorAll("tr")].some((tr) => tr.innerText.includes("504") && tr.innerText.includes("Оттегли")), { timeout: 15000 });
   });
 
+  await step("entries page flags entries for the organizer to check (eligibility)", async () => {
+    await admin.goto(`${APP}/bg/admin/events/${eventId}/entries`, { waitUntil: "networkidle2" });
+    await waitText(admin, "за проверка от организатора");
+    // Entry 500 was added with a birth date but no licence; the CSV/Excel imports carry no licences either.
+    await admin.waitForFunction(
+      () => [...document.querySelectorAll("tr")].some((tr) => tr.innerText.includes("500") && tr.innerText.includes("няма лиценз")),
+      { timeout: 15000 },
+    );
+  });
+
   let stageId;
   await step("create a navigation stage (redirects to stage page)", async () => {
     await admin.goto(`${APP}/bg/admin/events/${eventId}/stages`, { waitUntil: "networkidle2" });
