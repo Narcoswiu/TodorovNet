@@ -308,6 +308,73 @@ begin
     assert failed, 'unknown email is reported';
   end;
 
+  -- ── Enduro-cross formats: 21 Expert riders → groups A/B, finals grid of 12, red flag ──
+  declare
+    v_x_event  bigint;
+    v_x_stage  bigint;
+    v_exp      bigint := (select id from public.classes where season_id = v_season and code = 'exp');
+    v_rider    bigint;
+    v_a        bigint;
+    v_b        bigint;
+    v_heat     bigint;
+    v_t        timestamptz := '2026-11-08 10:00:00+02';
+    e          record;
+    grid       text;
+  begin
+    insert into public.events (name, date_from, date_to, status) values ('EX formats test', '2026-11-08', '2026-11-08', 'upcoming')
+    returning id into v_x_event;
+    insert into public.event_classes (event_id, class_id) values (v_x_event, v_exp);
+    for i in 1 .. 21 loop
+      insert into public.riders (first_name, last_name) values ('EX', 'Rider' || i) returning id into v_rider;
+      insert into public.entries (event_id, rider_id, class_id, race_number) values (v_x_event, v_rider, v_exp, i);
+    end loop;
+    insert into public.stages (event_id, day_number, type, name, points_scale)
+    values (v_x_event, 2, 'enduro_cross', 'EX', 'bgx_closed_course') returning id into v_x_stage;
+    insert into public.stage_classes (stage_id, event_id, class_id) values (v_x_stage, v_x_event, v_exp);
+    insert into public.sessions (event_id, stage_id, class_id, kind, number, duration_minutes)
+    values (v_x_event, v_x_stage, v_exp, 'qualifying', 1, 20), (v_x_event, v_x_stage, v_exp, 'heat', 1, 8);
+    select id into v_heat from public.sessions where stage_id = v_x_stage and kind = 'heat';
+
+    assert public.build_qualifying_groups(v_x_stage) = 1, 'one class split into groups';
+    select id into v_a from public.sessions where stage_id = v_x_stage and kind = 'qualifying' and group_label = 'A';
+    select id into v_b from public.sessions where stage_id = v_x_stage and kind = 'qualifying' and group_label = 'B';
+    assert not exists (select 1 from public.sessions where stage_id = v_x_stage and kind = 'qualifying' and group_label is null),
+      'ungrouped qualifying replaced';
+    assert (select count(*) from public.session_riders where session_id = v_a) = 11
+       and (select count(*) from public.session_riders where session_id = v_b) = 10, 'alternate split 11/10';
+
+    -- Qualifying: every rider does one timed lap of 60 s + race number seconds, so #1 is fastest.
+    for e in
+      select sr.session_id, sr.entry_id, en.race_number
+      from public.session_riders sr join public.entries en on en.id = sr.entry_id
+      where sr.session_id in (v_a, v_b)
+    loop
+      insert into public.laps (client_id, event_id, session_id, entry_id, crossed_at) values
+        (gen_random_uuid(), v_x_event, e.session_id, e.entry_id, v_t),
+        (gen_random_uuid(), v_x_event, e.session_id, e.entry_id, v_t + make_interval(secs => 60 + e.race_number));
+    end loop;
+
+    assert public.build_finals_grid(v_x_stage) = 12, 'finals grid of 12';
+    select string_agg(en.race_number::text, ',' order by sr.grid_position) into grid
+    from public.session_riders sr join public.entries en on en.id = sr.entry_id where sr.session_id = v_heat;
+    assert grid = '1,2,3,4,5,6,7,8,9,10,11,12', 'grid follows best qualifying lap across both groups, got ' || grid;
+
+    -- Red flag at 7 minutes, decided "count": crossings after the flag do not count.
+    update public.sessions set started_at = v_t + interval '1 hour' where id = v_heat;
+    insert into public.laps (client_id, event_id, session_id, entry_id, crossed_at)
+    select gen_random_uuid(), v_x_event, v_heat, en.id, v_t + interval '1 hour' + m * interval '3 minutes'
+    from public.entries en, generate_series(1, 3) m
+    where en.event_id = v_x_event and en.race_number = 1;
+    update public.sessions set red_flag_at = v_t + interval '1 hour 7 minutes', red_flag_decision = 'count' where id = v_heat;
+    assert (select laps from public.session_results where session_id = v_heat and race_number = 1) = 2,
+      'red flag counted: only laps before the flag';
+    assert (select count(*) from public.session_results where session_id = v_heat) = 12, 'only the grid races the heat';
+
+    -- Decided "restart" instead: the crossings are voided and the heat is not started any more.
+    assert public.restart_session(v_heat) = 3, 'restart voids the three crossings';
+    assert (select started_at is null and red_flag_decision = 'restart' from public.sessions where id = v_heat), 'heat reset';
+  end;
+
   raise notice 'results scenario: all assertions passed';
 end;
 $$;

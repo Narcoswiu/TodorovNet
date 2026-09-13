@@ -1191,6 +1191,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["session_kind"]
           number: number
           red_flag_at: string | null
+          red_flag_decision: string | null
           stage_id: number
           started_at: string | null
         }
@@ -1205,6 +1206,7 @@ export type Database = {
           kind: Database["public"]["Enums"]["session_kind"]
           number?: number
           red_flag_at?: string | null
+          red_flag_decision?: string | null
           stage_id: number
           started_at?: string | null
         }
@@ -1219,6 +1221,7 @@ export type Database = {
           kind?: Database["public"]["Enums"]["session_kind"]
           number?: number
           red_flag_at?: string | null
+          red_flag_decision?: string | null
           stage_id?: number
           started_at?: string | null
         }
@@ -1790,6 +1793,11 @@ export type Database = {
         }
         Returns: string
       }
+      build_finals_grid: {
+        Args: { p_size?: number; p_stage_id: number }
+        Returns: number
+      }
+      build_qualifying_groups: { Args: { p_stage_id: number }; Returns: number }
       event_staff_members: {
         Args: { p_event_id: number }
         Returns: {
@@ -1825,6 +1833,7 @@ export type Database = {
         }
         Returns: number
       }
+      restart_session: { Args: { p_session_id: number }; Returns: number }
       server_time: { Args: never; Returns: string }
     }
     Enums: {

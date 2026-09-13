@@ -284,6 +284,25 @@ function cp1251(text) {
     return "Pro 10 min, Expert 8 min, qualifying 20 min";
   });
 
+  await step("enduro-cross: finals grid (navigation order without qualifying), red flag, restart", async () => {
+    // Still on the enduro-cross stage page created in the previous step.
+    await submitForm(admin, "Финална решетка (първите 12 от квалификацията)");
+    await waitText(admin, "Места в решетките:");
+    const places = sql(`select count(*) from session_riders sr join sessions s on s.id = sr.session_id join stages st on st.id = s.stage_id where st.event_id = ${eventId} and s.kind = 'heat'`);
+    if (places !== "8") throw new Error(`grid places ${places}, expected 2 heats × 2 classes × 2 riders`);
+
+    const heat = sql(`select s.id from sessions s join stages st on st.id = s.stage_id join classes c on c.id = s.class_id where st.event_id = ${eventId} and s.kind = 'heat' and s.number = 1 and c.code = 'pro'`);
+    sql(`update sessions set started_at = now() - interval '5 minutes' where id = ${heat}`);
+    await admin.reload({ waitUntil: "networkidle2" });
+    await clickButton(admin, "Червен флаг сега");
+    await waitText(admin, "Червен флаг ");
+    await clickButton(admin, "Рестарт на манша");
+    for (let i = 0; i < 20 && sql(`select coalesce(red_flag_decision, '') from sessions where id = ${heat}`) !== "restart"; i++) await sleep(500);
+    const state = sql(`select coalesce(red_flag_decision, '') || '/' || (started_at is null) from sessions where id = ${heat}`);
+    if (state !== "restart/true") throw new Error(`heat state ${state}`);
+    return "8 grid places, heat restarted";
+  });
+
   await step("staff: assign by email, unknown email explained, remove", async () => {
     await admin.goto(`${APP}/bg/admin/events/${eventId}/staff`, { waitUntil: "networkidle2" });
     await submitForm(admin, "Добави към екипа", { email: "nobody@demo.local", role: "timekeeper" });

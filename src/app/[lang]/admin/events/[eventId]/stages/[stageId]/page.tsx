@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionButton } from "@/components/admin/action-button";
 import { ActionForm } from "@/components/admin/action-form";
+import { EnduroSessions } from "@/components/admin/enduro-sessions";
 import { Card, TextField } from "@/components/admin/fields";
 import { StageFields } from "@/components/admin/stage-fields";
 import { hasLocale } from "@/i18n/config";
@@ -9,7 +10,6 @@ import { getDictionary } from "@/i18n/get-dictionary";
 import { localizedName, stageName } from "@/i18n/localize";
 import {
   addCheckpoint,
-  createSessions,
   deleteCheckpoint,
   generateStartList,
   saveStageClasses,
@@ -48,7 +48,7 @@ export default async function StageDetailPage({ params }: PageProps<"/[lang]/adm
       supabase.from("checkpoints").select("id, code, name, name_en, sort_order").eq("stage_id", stageId).order("sort_order"),
       supabase
         .from("sessions")
-        .select("id, class_id, kind, number, group_label, duration_minutes, started_at")
+        .select("id, class_id, kind, number, group_label, duration_minutes, started_at, red_flag_at, red_flag_decision")
         .eq("stage_id", stageId)
         .order("class_id")
         .order("kind")
@@ -60,6 +60,22 @@ export default async function StageDetailPage({ params }: PageProps<"/[lang]/adm
         .order("position"),
     ]);
   if (!stage) notFound();
+
+  // Enduro-cross: live session results, grid places and rider names for the session tables.
+  const isSessionStage = stage.type === "enduro_cross" || stage.type === "prologue" || stage.type === "gncc";
+  const [{ data: sessionResults }, { data: gridRows }, { data: stageEntries }] = isSessionStage
+    ? await Promise.all([
+        supabase
+          .from("session_results")
+          .select("session_id, entry_id, race_number, laps, best_lap_s, total_s, result_status, position, points")
+          .eq("stage_id", stageId),
+        supabase
+          .from("session_riders")
+          .select("session_id, entry_id, grid_position")
+          .in("session_id", (sessions ?? []).map((session) => session.id)),
+        supabase.from("entries").select("id, riders(first_name, last_name)").eq("event_id", eventId),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }];
 
   const classNames = new Map(
     (stageClasses ?? []).map((row) => {
@@ -168,25 +184,19 @@ export default async function StageDetailPage({ params }: PageProps<"/[lang]/adm
         </Card>
       )}
 
-      {(stage.type === "enduro_cross" || stage.type === "prologue" || stage.type === "gncc") && (
+      {isSessionStage && (
         <Card title={s.sessions}>
-          <ul className="mb-3 divide-y divide-border text-sm">
-            {(sessions ?? []).map((session) => (
-              <li key={session.id} className="flex justify-between gap-2 py-1.5">
-                <span>
-                  {classNames.get(session.class_id)} · {session.kind === "qualifying" ? "Q" : `H${session.number}`}
-                  {session.group_label ? ` ${session.group_label}` : ""}
-                </span>
-                <span className="text-muted">
-                  {session.duration_minutes} {s.duration}
-                  {session.started_at && ` · ${formatClock(session.started_at)}`}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <ActionForm action={createSessions} submitLabel={s.createSessions} pendingLabel={dict.common.loading}>
-            {hidden}
-          </ActionForm>
+          <EnduroSessions
+            lang={lang}
+            dict={dict}
+            eventId={eventId}
+            stageId={stageId}
+            classes={(stageClasses ?? []).map((row) => ({ id: row.class_id, name: classNames.get(row.class_id) ?? "" }))}
+            sessions={sessions ?? []}
+            results={sessionResults ?? []}
+            grid={new Map((gridRows ?? []).filter((row) => row.grid_position != null).map((row) => [`${row.session_id}:${row.entry_id}`, row.grid_position as number]))}
+            riderNames={new Map((stageEntries ?? []).map((entry) => [entry.id, `${entry.riders?.first_name ?? ""} ${entry.riders?.last_name ?? ""}`]))}
+          />
         </Card>
       )}
 
