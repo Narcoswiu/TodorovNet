@@ -35,6 +35,18 @@ export type StageView =
 
 export type StageSelector = { kind: "navigation" | "enduro_cross"; stageId: number } | { kind: "round" };
 
+export type StartSlot = { position: number; scheduled_start: string; entry_id: number };
+
+export async function loadStartList(supabase: Client, stageId: number): Promise<StartSlot[]> {
+  const { data, error } = await supabase
+    .from("start_slots")
+    .select("position, scheduled_start, entry_id")
+    .eq("stage_id", stageId)
+    .order("position");
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function loadClasses(supabase: Client, eventId: number): Promise<ClassInfo[]> {
   const { data, error } = await supabase
     .from("event_classes")

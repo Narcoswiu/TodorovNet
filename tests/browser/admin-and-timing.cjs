@@ -294,6 +294,42 @@ function cp1251(text) {
     await admin.waitForFunction(() => !document.body.innerText.includes("Демо Хронометрист"), { timeout: 15000 });
   });
 
+  await step("public start list view", async () => {
+    const visitor = await browser.newPage();
+    await visitor.goto(`${APP}/bg/e/${eventId}?stage=${stageId}&view=start`, { waitUntil: "networkidle2" });
+    await waitText(visitor, "09:03:00");
+    await waitText(visitor, "Ръчен Участник");
+    await visitor.goto(`${APP}/en/e/${eventId}?stage=${stageId}&view=start`, { waitUntil: "networkidle2" });
+    await waitText(visitor, "Rachen Uchastnik");
+    await visitor.close();
+    return "BG and EN (transliterated)";
+  });
+
+  await step("admin adds a time by hand, then voids it with a reason", async () => {
+    await admin.goto(`${APP}/bg/admin/events/${eventId}/timing?stage=${stageId}`, { waitUntil: "networkidle2" });
+    await submitForm(admin, "Добави време ръчно", { race_number: "500", point: "finish", date: "2026-10-10", time: "13:05:07" });
+    await waitText(admin, "13:05:07");
+    const elapsed = sql(`select elapsed_s from navigation_results where stage_id = ${stageId} and race_number = 500`);
+    if (Number(elapsed) !== 4 * 3600 + 5 * 60 + 7) throw new Error(`elapsed ${elapsed}`);
+    await admin.evaluate(() => {
+      const row = [...document.querySelectorAll("tr")].find((tr) => tr.innerText.includes("13:05:07") && tr.querySelector('input[name="reason"]'));
+      row.querySelector('input[name="reason"]').value = "грешен номер";
+      [...row.querySelectorAll("button")].find((b) => b.textContent.trim() === "Анулирай").click();
+    });
+    await waitText(admin, "Анулиран: грешен номер");
+    const status = sql(`select result_status from navigation_results where stage_id = ${stageId} and race_number = 500`);
+    if (status === "classified") throw new Error("voided finish still classified");
+    return `elapsed 4:05:07, after void: ${status}`;
+  });
+
+  await step("jury-side adjustment: deduct 15 minutes for a whole class", async () => {
+    const pro = sql(`select id from classes where code = 'pro' and season_id = (select id from seasons where year = 2026)`);
+    await submitForm(admin, "Добави корекция", { scope: "class", class_id: pro, minutes: "-15", reason: "фиксирана почивка" });
+    await waitText(admin, "фиксирана почивка");
+    const seconds = sql(`select seconds from time_adjustments where stage_id = ${stageId} and class_id = ${pro}`);
+    if (Number(seconds) !== -900) throw new Error(`seconds ${seconds}`);
+  });
+
   await step("English admin page renders translated", async () => {
     await admin.goto(`${APP}/en/admin/events/${eventId}/entries`, { waitUntil: "networkidle2" });
     await waitText(admin, "Import from Excel or CSV");
@@ -349,9 +385,9 @@ function cp1251(text) {
   let timer;
   // Two riders with no finish yet, whatever earlier runs recorded.
   const riders = sql(
-    `select string_agg(race_number::text, ',') from (select e.race_number from entries e where e.event_id = ${demoEvent} and not e.withdrawn and not exists (select 1 from passings p where p.entry_id = e.id and p.stage_id = ${demoStage} and p.point = 'finish' and p.voided_at is null) order by e.race_number limit 2) r`,
+    `select string_agg(race_number::text, ',') from (select e.race_number from entries e where e.event_id = ${demoEvent} and not e.withdrawn and not exists (select 1 from passings p where p.entry_id = e.id and p.stage_id = ${demoStage} and p.point = 'finish' and p.voided_at is null) order by e.race_number limit 3) r`,
   ).split(",");
-  if (riders.length < 2) throw new Error("demo data exhausted: run `npx supabase db reset`");
+  if (riders.length < 3) throw new Error("demo data exhausted: run `npx supabase db reset`");
 
   const typeNumber = async (page, number) => {
     await clickButton(page, "C");
@@ -390,6 +426,37 @@ function cp1251(text) {
     await typeNumber(timer, riders[0]);
     await clickButton(timer, "Запиши");
     await waitText(timer, "Вече има запис за този участник на тази точка");
+  });
+
+  await step("timekeeper enters a time by hand (from a paper sheet)", async () => {
+    await typeNumber(timer, riders[2]);
+    await timer.evaluate((value) => {
+      document.querySelector("details").open = true;
+      const input = document.querySelector('input[name="manual_time"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, "12:34:56");
+    await clickButton(timer, "Запиши");
+    await timer.waitForFunction(
+      (label) => [...document.querySelectorAll("li")].some((li) => li.innerText.includes(label) && li.innerText.includes("Записано")),
+      { timeout: 15000 },
+      `#${riders[2]} ·`,
+    );
+    const row = sql(`select to_char(p.passed_at at time zone 'Europe/Sofia', 'HH24:MI:SS') || '/' || p.source from passings p join entries e on e.id = p.entry_id where p.stage_id = ${demoStage} and e.race_number = ${riders[2]} and p.point = 'finish' and p.voided_at is null`);
+    if (row !== "12:34:56/manual") throw new Error(`stored ${row}`);
+    return row;
+  });
+
+  await step("timekeeper voids a record from the phone list (two-step)", async () => {
+    await clickButton(timer, "Анулирай", `#${riders[2]} ·`);
+    await clickButton(timer, "Потвърди анулиране", `#${riders[2]} ·`);
+    await timer.waitForFunction(
+      (label) => [...document.querySelectorAll("li")].some((li) => li.innerText.includes(label) && li.innerText.includes("Анулиран")),
+      { timeout: 15000 },
+      `#${riders[2]} ·`,
+    );
+    const active = sql(`select count(*) from passings p join entries e on e.id = p.entry_id where p.stage_id = ${demoStage} and e.race_number = ${riders[2]} and p.point = 'finish' and p.voided_at is null`);
+    if (active !== "0") throw new Error(`still active: ${active}`);
   });
 
   await step("timing app reopens offline (service worker)", async () => {

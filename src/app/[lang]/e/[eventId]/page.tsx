@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LiveResults } from "@/components/results/live-results";
+import { StartList } from "@/components/results/start-list";
 import { SiteHeader } from "@/components/site-header";
 import { hasLocale, t } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
 import { stageName, transliterate } from "@/i18n/localize";
 import { formatClock, formatDateRange } from "@/lib/format";
-import { loadClasses, loadEntries, loadView, type StageSelector } from "@/lib/results/queries";
+import { loadClasses, loadEntries, loadStartList, loadView, type StageSelector } from "@/lib/results/queries";
 import { createClient } from "@/lib/supabase/server";
 
 async function loadEvent(eventId: number) {
@@ -51,14 +52,18 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
   if (!event) notFound();
 
   const stages = stagesResult.data ?? [];
-  const { stage: stageParam } = await searchParams;
+  const { stage: stageParam, view: viewParam } = await searchParams;
   const requested = typeof stageParam === "string" ? stageParam : undefined;
   const selectedStage = stages.find((stage) => String(stage.id) === requested) ?? (requested === "round" ? null : stages[0]);
 
   const selector: StageSelector = selectedStage
     ? { kind: selectedStage.type === "enduro_cross" ? "enduro_cross" : "navigation", stageId: selectedStage.id }
     : { kind: "round" };
-  const view = await loadView(supabase, eventId, selector);
+  const showStartList = viewParam === "start" && selectedStage?.type === "navigation";
+  const [view, startSlots] = await Promise.all([
+    showStartList ? null : loadView(supabase, eventId, selector),
+    showStartList && selectedStage ? loadStartList(supabase, selectedStage.id) : null,
+  ]);
 
   const text = (value: string) => (lang === "en" ? transliterate(value) : value);
   const tabClass = (active: boolean) =>
@@ -96,22 +101,48 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
           )}
         </nav>
 
-        {selectedStage?.course_closes_at && (
-          <p className="mb-3 text-xs text-muted">
-            {t(dict.event.closesAt, { time: formatClock(selectedStage.course_closes_at) })}
-          </p>
+        {selectedStage?.type === "navigation" && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex rounded-md border border-border text-xs font-medium">
+              <Link
+                href={`?stage=${selectedStage.id}`}
+                aria-current={!showStartList ? "page" : undefined}
+                className={`rounded-l-md px-3 py-1 ${!showStartList ? "bg-foreground text-background" : "text-muted"}`}
+              >
+                {dict.event.standings}
+              </Link>
+              <Link
+                href={`?stage=${selectedStage.id}&view=start`}
+                aria-current={showStartList ? "page" : undefined}
+                className={`rounded-r-md px-3 py-1 ${showStartList ? "bg-foreground text-background" : "text-muted"}`}
+              >
+                {dict.event.startList}
+              </Link>
+            </div>
+            {selectedStage.course_closes_at && (
+              <p className="text-xs text-muted">
+                {t(dict.event.closesAt, { time: formatClock(selectedStage.course_closes_at) })}
+              </p>
+            )}
+          </div>
         )}
 
-        <LiveResults
-          key={selectedStage ? selectedStage.id : "round"}
-          lang={lang}
-          dict={dict}
-          eventId={eventId}
-          selector={selector}
-          initialView={view}
-          classes={classes}
-          entries={entries}
-        />
+        {showStartList ? (
+          <StartList lang={lang} dict={dict} slots={startSlots ?? []} classes={classes} entries={entries} />
+        ) : (
+          view && (
+            <LiveResults
+              key={selectedStage ? selectedStage.id : "round"}
+              lang={lang}
+              dict={dict}
+              eventId={eventId}
+              selector={selector}
+              initialView={view}
+              classes={classes}
+              entries={entries}
+            />
+          )
+        )}
       </main>
     </>
   );

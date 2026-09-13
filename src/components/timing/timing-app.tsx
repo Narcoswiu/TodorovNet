@@ -9,7 +9,8 @@ import { localizedName, riderName, stageName } from "@/i18n/localize";
 import { formatClock } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { correctedNow, measureClockOffset, storedClockOffset } from "@/lib/timing/clock";
-import { enqueue, listItems, loadSnapshot, saveSnapshot, syncQueue, type QueueItem } from "@/lib/timing/queue";
+import { enqueue, listItems, loadSnapshot, saveSnapshot, syncQueue, voidOnServer, type QueueItem } from "@/lib/timing/queue";
+import { eventLocalToIso, isoToEventLocal } from "@/lib/timezone";
 
 type StaffEvent = { id: number; name: string; location: string; date_from: string; roles: string[] };
 
@@ -35,6 +36,7 @@ const USER_KEY = "todorovnet.timing.user";
 // stops waiting after this and shows the data saved on the phone.
 const READ_TIMEOUT_MS = 4000;
 const SYNC_EVERY_MS = 10_000;
+const STATUS_TONE = { synced: "text-good", rejected: "text-bad", pending: "text-warn", voided: "text-muted" } as const;
 const CLOCK_EVERY_MS = 5 * 60_000;
 
 export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
@@ -52,6 +54,9 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
 
   const [digits, setDigits] = useState("");
   const [stampedAt, setStampedAt] = useState<Date | null>(null);
+  const [manualDate, setManualDate] = useState("");
+  const [manualTime, setManualTime] = useState("");
+  const [confirmVoid, setConfirmVoid] = useState<string | null>(null);
   const [items, setItems] = useState<QueueItem[]>([]);
   const [offset, setOffset] = useState<number | null>(null);
   const [online, setOnline] = useState(true);
@@ -256,7 +261,20 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       setMessage({ text: t(dict.timing.unknownNumber, { n: typedNumber }), tone: "bad" });
       return;
     }
-    const at = stampedAt ?? correctedNow(offset ?? 0);
+    // A time typed from a paper sheet wins over the stamp and the clock.
+    let at: Date;
+    if (manualTime) {
+      const today = isoToEventLocal(new Date().toISOString()).slice(0, 10);
+      const iso = eventLocalToIso(`${manualDate || today}T${manualTime}`);
+      if (!iso) {
+        setMessage({ text: dict.timing.invalidTime, tone: "bad" });
+        return;
+      }
+      at = new Date(iso);
+    } else {
+      at = stampedAt ?? correctedNow(offset ?? 0);
+    }
+    const source = manualTime ? "manual" : "device";
 
     if (stage.type === "enduro_cross") {
       if (!session) return;
@@ -264,7 +282,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         table: "laps",
         event_id: eventId,
         label: `#${typedNumber} · ${sessionLabel(session)}`,
-        payload: { event_id: eventId, session_id: session.id, entry_id: typedEntry.id, crossed_at: at.toISOString(), source: "device" },
+        payload: { event_id: eventId, session_id: session.id, entry_id: typedEntry.id, crossed_at: at.toISOString(), source },
       });
     } else {
       const isCheckpoint = point.startsWith("cp:");
@@ -279,7 +297,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           point: isCheckpoint ? "checkpoint" : (point as "start" | "finish"),
           checkpoint_id: isCheckpoint ? Number(point.slice(3)) : null,
           passed_at: at.toISOString(),
-          source: "device",
+          source,
         },
       });
     }
@@ -287,8 +305,21 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
     setMessage({ text: t(dict.timing.recorded, { n: typedNumber, time: formatClock(at) }), tone: "good" });
     setDigits("");
     setStampedAt(null);
+    setManualTime("");
     setItems(await listItems(eventId));
     sync();
+  }
+
+  async function voidItem(item: QueueItem) {
+    setConfirmVoid(null);
+    if (eventId == null) return;
+    if (!navigator.onLine) {
+      setMessage({ text: dict.timing.voidNeedsConnection, tone: "bad" });
+      return;
+    }
+    const voided = await voidOnServer(supabase, item, dict.timing.voidReason);
+    if (!voided) setMessage({ text: dict.admin.errors.forbidden, tone: "bad" });
+    setItems(await listItems(eventId));
   }
 
   async function startSession() {
@@ -461,6 +492,36 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         >
           ⏱ {stampedAt ? formatClock(stampedAt) : formatClock(correctedNow(offset ?? 0)).slice(0, 5)}
         </button>
+        <details className="mt-2 text-left text-xs text-muted" open={!!manualTime}>
+          <summary className="cursor-pointer select-none">
+            {dict.timing.manualTime}
+            {manualTime ? `: ${manualTime}` : ""}
+          </summary>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <label className="block">
+              {dict.timing.date}
+              <input
+                type="date"
+                name="manual_date"
+                value={manualDate}
+                onChange={(e) => setManualDate(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-border bg-background px-2 py-2 text-base text-foreground"
+              />
+            </label>
+            <label className="block">
+              {dict.timing.manualTime}
+              <input
+                type="time"
+                step={1}
+                name="manual_time"
+                value={manualTime}
+                onChange={(e) => setManualTime(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-border bg-background px-2 py-2 text-base text-foreground"
+              />
+            </label>
+          </div>
+          <p className="mt-1">{dict.timing.manualTimeHelp}</p>
+        </details>
       </div>
 
       <div className="mb-3 grid grid-cols-3 gap-2">
@@ -498,22 +559,31 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           return (
             <li key={item.client_id} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
               <div>
-                <div className="font-medium">{item.label}</div>
+                <div className={`font-medium ${item.status === "voided" ? "text-muted line-through" : ""}`}>{item.label}</div>
                 {item.error && <div className="text-xs text-bad">{item.error}</div>}
               </div>
               <div className="text-right">
                 <div className="font-mono tabular-nums">{formatClock(at)}</div>
-                <div
-                  className={`text-xs ${
-                    item.status === "synced" ? "text-good" : item.status === "rejected" ? "text-bad" : "text-warn"
-                  }`}
-                >
-                  {item.status === "synced"
-                    ? dict.timing.synced
-                    : item.status === "rejected"
-                      ? dict.timing.rejected
-                      : dict.timing.queued}
+                <div className={`text-xs ${STATUS_TONE[item.status]}`}>
+                  {
+                    {
+                      synced: dict.timing.synced,
+                      rejected: dict.timing.rejected,
+                      pending: dict.timing.queued,
+                      voided: dict.timing.voided,
+                    }[item.status]
+                  }
                 </div>
+                {item.status === "synced" &&
+                  (confirmVoid === item.client_id ? (
+                    <button type="button" onClick={() => voidItem(item)} className="mt-1 text-xs font-medium text-bad underline">
+                      {dict.timing.voidConfirm}
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => setConfirmVoid(item.client_id)} className="mt-1 text-xs text-muted underline">
+                      {dict.timing.void}
+                    </button>
+                  ))}
               </div>
             </li>
           );

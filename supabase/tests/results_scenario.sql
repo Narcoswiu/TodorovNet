@@ -187,13 +187,29 @@ begin
   select * into got from public.team_season_standings where season_id = v_season and club_id = v_club;
   assert got.team_points = 90 and got.rounds_scored = 3, 'team season: plain sum 90, got ' || got.team_points;
 
+  -- ── Neutralised time: 10 minutes of first aid deducted from rider 1 ──
+  insert into public.time_adjustments (event_id, stage_id, entry_id, seconds, reason)
+  values (v_event, v_nav, e1, -600, 'first aid');
+  select * into got from public.navigation_results where stage_id = v_nav and entry_id = e1;
+  assert got.adjustment_s = -600 and got.total_s = 4 * 3600 + 7200 - 600, 'adjustment deducted, got ' || got.total_s;
+  -- A class-wide rest applies to every rider of the class.
+  insert into public.time_adjustments (event_id, stage_id, class_id, seconds, reason)
+  values (v_event, v_nav, v_pro, -900, 'fixed rest');
+  select * into got from public.navigation_results where stage_id = v_nav and entry_id = e2;
+  assert got.adjustment_s = -900, 'class adjustment applies to e2, got ' || got.adjustment_s;
+  delete from public.time_adjustments where stage_id = v_nav;
+
   -- ── Correction: voiding e2's navigation finish makes rider 1 the winner ──
   update public.passings set voided_at = now(), void_reason = 'wrong rider'
   where stage_id = v_nav and entry_id = e2 and point = 'finish';
   select * into got from public.navigation_results where stage_id = v_nav and entry_id = e1;
   assert got.position = 1, 'voided finish removes e2 from the classification';
-  assert (select count(*) from public.audit_log where table_name = 'passings' and action = 'update') = 1,
-    'void is written to the audit log';
+  assert exists (
+    select 1 from public.audit_log a
+    where a.table_name = 'passings' and a.action = 'update'
+      and a.row_id = (select p.id::text from public.passings p where p.stage_id = v_nav and p.entry_id = e2 and p.point = 'finish')
+      and a.new_row ->> 'void_reason' = 'wrong rider'
+  ), 'void is written to the audit log';
 
   -- ── Start-list generator: Pro 1 per 30 s, Expert 2 per 30 s after a 2-minute gap ──
   declare

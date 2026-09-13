@@ -11,7 +11,7 @@ import type { Database, TablesInsert } from "@/lib/database.types";
  * server rejects stays visible with the reason instead of silently disappearing.
  */
 
-export type QueueStatus = "pending" | "synced" | "rejected";
+export type QueueStatus = "pending" | "synced" | "rejected" | "voided";
 
 type PassingRow = Omit<TablesInsert<"passings">, "client_id">;
 type LapRow = Omit<TablesInsert<"laps">, "client_id">;
@@ -80,6 +80,32 @@ export async function listItems(eventId: number): Promise<QueueItem[]> {
 
 export async function removeItem(clientId: string): Promise<void> {
   await (await getDb()).delete("items", clientId);
+}
+
+/** Records that a synced record was voided on the server, so the phone's list shows it struck out. */
+export async function markVoided(clientId: string): Promise<void> {
+  const db = await getDb();
+  const item = await db.get("items", clientId);
+  if (item) await db.put("items", { ...item, status: "voided" });
+}
+
+/**
+ * Voids a record on the server. Needs a connection: a void is a decision about an existing record,
+ * so it must not be replayed later against data that may have changed.
+ */
+export async function voidOnServer(
+  supabase: SupabaseClient<Database>,
+  item: QueueItem,
+  reason: string,
+): Promise<boolean> {
+  const values = { voided_at: new Date().toISOString(), void_reason: reason };
+  const { data, error } =
+    item.table === "passings"
+      ? await supabase.from("passings").update(values).eq("client_id", item.client_id).is("voided_at", null).select("id")
+      : await supabase.from("laps").update(values).eq("client_id", item.client_id).is("voided_at", null).select("id");
+  if (error || !data?.length) return false;
+  await markVoided(item.client_id);
+  return true;
 }
 
 export type SyncResult = { synced: number; rejected: number; pending: number; offline: boolean };
