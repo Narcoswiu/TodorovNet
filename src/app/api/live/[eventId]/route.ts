@@ -1,0 +1,35 @@
+import { loadView, type StageSelector } from "@/lib/results/queries";
+import { createPublicClient } from "@/lib/supabase/public";
+
+// GET /api/live/42?stage=7  or  /api/live/42?stage=round&ranking=time → live standings as JSON.
+// Public data only, read without cookies, and cached at the edge for a few seconds: however many people
+// watch, the database answers about one query per stage every 5 seconds.
+const CACHED = { "Cache-Control": "public, max-age=0, s-maxage=5, stale-while-revalidate=5" };
+const notFound = () => Response.json({ error: "not found" }, { status: 404, headers: CACHED });
+
+export async function GET(request: Request, { params }: RouteContext<"/api/live/[eventId]">) {
+  const { eventId: rawId } = await params;
+  const eventId = Number(rawId);
+  if (!Number.isInteger(eventId)) return notFound();
+
+  const search = new URL(request.url).searchParams;
+  const stageParam = search.get("stage") ?? "round";
+  const supabase = createPublicClient();
+
+  let selector: StageSelector;
+  if (stageParam === "round") {
+    selector = { kind: "round", ranking: search.get("ranking") === "time" ? "time" : "points" };
+  } else {
+    const stageId = Number(stageParam);
+    if (!Number.isInteger(stageId)) return notFound();
+    const { data: stage } = await supabase.from("stages").select("type").eq("id", stageId).eq("event_id", eventId).maybeSingle();
+    if (!stage || (stage.type !== "navigation" && stage.type !== "enduro_cross")) return notFound();
+    selector = { kind: stage.type, stageId };
+  }
+
+  try {
+    return Response.json(await loadView(supabase, eventId, selector), { headers: CACHED });
+  } catch {
+    return Response.json({ error: "unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
+}

@@ -5,9 +5,9 @@ import { t, type Locale } from "@/i18n/config";
 import type { Dictionary } from "@/i18n/get-dictionary";
 import { localizedName, riderName, transliterate } from "@/i18n/localize";
 import { numberPlateStyle } from "@/lib/classes";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { formatClock, formatDuration, formatGap } from "@/lib/format";
 import {
-  loadView,
   type ClassInfo,
   type EntryInfo,
   type NavigationRow,
@@ -24,56 +24,102 @@ type Props = {
   initialView: StageView;
   classes: ClassInfo[];
   entries: EntryInfo[];
+  /** Skip realtime and poll (?live=poll): for big screens, and to test the fallback. */
+  forcePoll?: boolean;
 };
 
 const LIVE_TABLES = ["passings", "laps", "penalties", "rider_statuses", "sessions"] as const;
 const STATUS_ORDER = ["classified", "on_course", "nc", "dnf", "dns", "dsq"];
+const POLL_MS = 15_000;
 
-export function LiveResults({ lang, dict, eventId, selector, initialView, classes, entries }: Props) {
+export function LiveResults({ lang, dict, eventId, selector, initialView, classes, entries, forcePoll = false }: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [view, setView] = useState(initialView);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
-  const [connection, setConnection] = useState<"connecting" | "live" | "offline">("connecting");
+  const [connection, setConnection] = useState<"connecting" | "live" | "polling" | "offline">(
+    forcePoll ? "polling" : "connecting",
+  );
   const [classFilter, setClassFilter] = useState<number | null>(null);
 
-  const selectorKind = selector.kind;
   const stageId = selector.kind === "round" ? null : selector.stageId;
   const ranking = selector.kind === "round" ? selector.ranking : undefined;
 
-  // Push, not polling: any timing change for this event triggers one debounced refetch.
+  // Every viewer reads standings through one edge-cached endpoint, so a crowd costs the database about one
+  // query every few seconds. Realtime only signals "something changed". When realtime is refused (the plan's
+  // connection limit) or switched off, the page polls the same endpoint instead.
   useEffect(() => {
+    let disposed = false;
+    let polling = forcePoll;
     let debounce: ReturnType<typeof setTimeout> | undefined;
-    const current: StageSelector =
-      selectorKind === "round" || stageId == null ? { kind: "round", ranking } : { kind: selectorKind, stageId };
+    let followUp: ReturnType<typeof setTimeout> | undefined;
+    let poll: ReturnType<typeof setInterval> | undefined;
+    let channel: RealtimeChannel | null = null;
+    const query = stageId == null ? `stage=round&ranking=${ranking ?? "points"}` : `stage=${stageId}`;
 
     const refresh = async () => {
+      if (document.hidden) return;
       try {
-        setView(await loadView(supabase, eventId, current));
+        const response = await fetch(`/api/live/${eventId}?${query}`);
+        if (!response.ok) throw new Error(String(response.status));
+        const next = (await response.json()) as StageView;
+        if (disposed) return;
+        setView(next);
         setUpdatedAt(new Date());
+        if (polling) setConnection("polling");
       } catch {
         // Keep showing the last good data; the next change or tick retries.
+        if (!disposed && polling) setConnection("offline");
       }
     };
     const schedule = () => {
       clearTimeout(debounce);
+      clearTimeout(followUp);
       debounce = setTimeout(refresh, 1000);
+      // The edge copy lives a few seconds; a second read picks up the fresh one.
+      followUp = setTimeout(refresh, 12_000);
     };
+    const onVisible = () => {
+      if (!document.hidden) refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
-    const channel = supabase.channel(`event-${eventId}-${stageId ?? "round"}`);
-    for (const table of LIVE_TABLES) {
-      channel.on("postgres_changes", { event: "*", schema: "public", table, filter: `event_id=eq.${eventId}` }, schedule);
+    if (forcePoll) {
+      poll = setInterval(refresh, POLL_MS);
+    } else {
+      channel = supabase.channel(`event-${eventId}-${stageId ?? "round"}`);
+      for (const table of LIVE_TABLES) {
+        channel.on("postgres_changes", { event: "*", schema: "public", table, filter: `event_id=eq.${eventId}` }, schedule);
+      }
+      channel.subscribe((status) => {
+        if (disposed) return;
+        if (status === "SUBSCRIBED") {
+          polling = false;
+          clearInterval(poll);
+          setConnection("live");
+        } else if (!polling) {
+          polling = true;
+          setConnection("polling");
+          poll = setInterval(refresh, POLL_MS);
+          refresh();
+        }
+      });
     }
-    channel.subscribe((status) => setConnection(status === "SUBSCRIBED" ? "live" : "offline"));
 
     // Riders still out when the course closes turn into DNF on the clock, not on an event.
-    const tick = setInterval(refresh, 60_000);
+    const tick = setInterval(() => {
+      if (!polling) refresh();
+    }, 60_000);
 
     return () => {
+      disposed = true;
       clearTimeout(debounce);
+      clearTimeout(followUp);
+      clearInterval(poll);
       clearInterval(tick);
-      supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (channel) supabase.removeChannel(channel);
     };
-  }, [supabase, eventId, selectorKind, stageId, ranking]);
+  }, [supabase, eventId, stageId, ranking, forcePoll]);
 
   const entryById = useMemo(() => new Map(entries.map((entry) => [entry.id, entry])), [entries]);
   const visibleClasses = classFilter == null ? classes : classes.filter((c) => c.id === classFilter);
@@ -94,13 +140,15 @@ export function LiveResults({ lang, dict, eventId, selector, initialView, classe
         <div className="flex items-center gap-2 text-xs text-muted" aria-live="polite">
           <span
             className={`size-2 rounded-full ${
-              connection === "live" ? "bg-good" : connection === "offline" ? "bg-warn" : "bg-muted"
+              connection === "live" || connection === "polling" ? "bg-good" : connection === "offline" ? "bg-warn" : "bg-muted"
             }`}
             aria-hidden
           />
           {connection === "live"
             ? dict.results.live
-            : connection === "offline"
+            : connection === "polling"
+              ? dict.results.polling
+              : connection === "offline"
               ? dict.common.offline
               : dict.common.connecting}
           {updatedAt && <span>· {t(dict.common.updatedAt, { time: formatClock(updatedAt) })}</span>}

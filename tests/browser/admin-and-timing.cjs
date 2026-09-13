@@ -597,6 +597,22 @@ function cp1251(text) {
     return "bg + en";
   });
 
+  await step("live standings fall back to polling an edge-cached endpoint (?live=poll)", async () => {
+    const response = await fetch(`${APP}/api/live/${demoEvent}?stage=${demoStage}`);
+    const cache = response.headers.get("cache-control") ?? "";
+    const body = await response.json();
+    if (response.status !== 200 || !cache.includes("s-maxage=5") || response.headers.get("set-cookie")) {
+      throw new Error(`${response.status} ${cache} cookie=${response.headers.get("set-cookie")}`);
+    }
+    if (body.kind !== "navigation" || !body.rows.length) throw new Error(JSON.stringify(body).slice(0, 200));
+    const page = await browser.newPage();
+    await page.goto(`${APP}/bg/e/${demoEvent}?stage=${demoStage}&live=poll`, { waitUntil: "domcontentloaded" });
+    await waitText(page, "Обновява се на всеки 15 с");
+    await waitText(page, "Обновено", 25000);
+    await page.close();
+    return `${body.rows.length} rows, ${cache}`;
+  });
+
   // ───────────── Timekeeper: timing app, offline and back ─────────────
   const timerContext = await browser.createBrowserContext();
   let timer;

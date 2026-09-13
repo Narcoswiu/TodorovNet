@@ -52,7 +52,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
   if (!event) notFound();
 
   const stages = stagesResult.data ?? [];
-  const { stage: stageParam, view: viewParam } = await searchParams;
+  const { stage: stageParam, view: viewParam, live: liveParam } = await searchParams;
   const requested = typeof stageParam === "string" ? stageParam : undefined;
   const selectedStage = stages.find((stage) => String(stage.id) === requested) ?? (requested === "round" ? null : stages[0]);
 
@@ -191,6 +191,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
               initialView={view}
               classes={classes}
               entries={entries}
+              forcePoll={liveParam === "poll"}
             />
             </>
           )

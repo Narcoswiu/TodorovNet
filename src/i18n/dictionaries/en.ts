@@ -58,6 +58,7 @@ export const en: Dictionary = {
     lastControl: "Last control",
     notStarted: "Not started",
     live: "Live results",
+    polling: "Updates every 15 s",
     provisional: "Provisional results",
     official: "Official results",
     penaltiesNote: "Only penalties confirmed by the jury are included.",
