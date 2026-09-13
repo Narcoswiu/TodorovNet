@@ -585,6 +585,18 @@ function cp1251(text) {
     return "bg + en";
   });
 
+  await step("officials' guide linked from the footer, in Bulgarian and English", async () => {
+    const page = await browser.newPage();
+    await page.goto(`${APP}/bg`, { waitUntil: "networkidle2" });
+    await page.evaluate(() => [...document.querySelectorAll("footer a")].find((a) => a.textContent.includes("Ръководство")).click());
+    await waitText(page, "Потвърди анулиране");
+    if (!page.url().endsWith("/bg/guide")) throw new Error(page.url());
+    await page.goto(`${APP}/en/guide`, { waitUntil: "networkidle2" });
+    await waitText(page, "Declare official");
+    await page.close();
+    return "bg + en";
+  });
+
   // ───────────── Timekeeper: timing app, offline and back ─────────────
   const timerContext = await browser.createBrowserContext();
   let timer;

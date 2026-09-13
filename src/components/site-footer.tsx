@@ -9,9 +9,14 @@ export function SiteFooter({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         <span>
           Todorov<span className="text-accent">NET</span>
         </span>
-        <Link href={`/${lang}/privacy`} className="hover:text-foreground">
-          {dict.footer.privacy}
-        </Link>
+        <span className="flex gap-4">
+          <Link href={`/${lang}/guide`} className="hover:text-foreground">
+            {dict.footer.guide}
+          </Link>
+          <Link href={`/${lang}/privacy`} className="hover:text-foreground">
+            {dict.footer.privacy}
+          </Link>
+        </span>
       </div>
     </footer>
   );
