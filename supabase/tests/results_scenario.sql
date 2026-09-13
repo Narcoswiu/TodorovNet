@@ -226,6 +226,45 @@ begin
     assert slots = '11@10:00:00 12@10:00:30 13@10:03:00 14@10:03:00 15@10:03:30', 'start slots, got ' || slots;
   end;
 
+  -- ── Entry import: new riders, a missing club, bad rows reported, same number updates ──
+  declare
+    v_imp_event bigint;
+    v_report    jsonb;
+    failed      boolean := false;
+  begin
+    insert into public.events (name, date_from, date_to, status) values ('Import test', '2026-11-02', '2026-11-02', 'upcoming')
+    returning id into v_imp_event;
+    insert into public.event_classes (event_id, class_id) values (v_imp_event, v_pro);
+
+    v_report := public.import_entries(v_imp_event, '[
+      {"race_number": "7", "first_name": "Иван",   "last_name": "Импортов", "class": "Pro", "club": "Нов МК", "birth_date": "1990-05-01", "phone": "0888"},
+      {"race_number": "8", "first_name": "Петър",  "last_name": "Импортов", "class": "про"},
+      {"race_number": "9", "first_name": "Грешен", "last_name": "Клас",     "class": "Мотокрос"},
+      {"race_number": "x", "first_name": "Без",    "last_name": "Номер",    "class": "Про"}
+    ]'::jsonb);
+    assert (v_report ->> 'added')::int = 2, 'import adds two rows, got ' || v_report;
+    assert jsonb_array_length(v_report -> 'errors') = 2, 'import reports the two bad rows, got ' || v_report;
+    assert (select count(*) from public.clubs where name = 'Нов МК') = 1, 'import creates a missing club';
+    assert (select rp.phone from public.rider_private rp
+            join public.entries e on e.rider_id = rp.rider_id
+            where e.event_id = v_imp_event and e.race_number = 7) = '0888', 'import stores personal data';
+
+    v_report := public.import_entries(v_imp_event,
+      '[{"race_number": "8", "first_name": "Петър", "last_name": "Импортов-Нов", "class": "Про"}]'::jsonb);
+    assert (v_report ->> 'updated')::int = 1, 'the same race number updates the entry, got ' || v_report;
+
+    -- ── Staff assignment by email ──
+    perform public.assign_staff(v_imp_event, 'OUTSIDER@test.local', 'timekeeper');
+    assert (select count(*) from public.event_staff_members(v_imp_event) where email = 'outsider@test.local' and role = 'timekeeper') = 1,
+      'assigned staff member is listed with email';
+    begin
+      perform public.assign_staff(v_imp_event, 'nobody@test.local', 'timekeeper');
+    exception when no_data_found then
+      failed := true;
+    end;
+    assert failed, 'unknown email is reported';
+  end;
+
   raise notice 'results scenario: all assertions passed';
 end;
 $$;

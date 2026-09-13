@@ -39,8 +39,9 @@ async function signedIn(email) {
       })
       .subscribe((status) => status === "SUBSCRIBED" && subscribed());
   });
-  // The server confirms the join slightly before the change listener is attached.
-  await new Promise((r) => setTimeout(r, 1000));
+  // The server confirms the join before the change listener is attached; right after
+  // `supabase db reset` Realtime also rebuilds its replication slot, which takes a few seconds.
+  await new Promise((r) => setTimeout(r, 3000));
 
   const timer = await signedIn("timer@demo.local");
   const gps = await signedIn("gps@demo.local");

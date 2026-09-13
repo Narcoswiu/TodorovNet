@@ -1771,6 +1771,23 @@ export type Database = {
       }
     }
     Functions: {
+      assign_staff: {
+        Args: {
+          p_email: string
+          p_event_id: number
+          p_role: Database["public"]["Enums"]["staff_role"]
+        }
+        Returns: string
+      }
+      event_staff_members: {
+        Args: { p_event_id: number }
+        Returns: {
+          email: string
+          full_name: string
+          role: Database["public"]["Enums"]["staff_role"]
+          user_id: string
+        }[]
+      }
       event_visible: { Args: { p_event_id: number }; Returns: boolean }
       generate_start_list: { Args: { p_stage_id: number }; Returns: number }
       has_event_role: {
@@ -1779,6 +1796,10 @@ export type Database = {
           p_roles: Database["public"]["Enums"]["staff_role"][]
         }
         Returns: boolean
+      }
+      import_entries: {
+        Args: { p_event_id: number; p_rows: Json }
+        Returns: Json
       }
       is_any_organizer: { Args: never; Returns: boolean }
       is_event_staff: { Args: { p_event_id: number }; Returns: boolean }

@@ -30,6 +30,10 @@ type EventData = {
 };
 
 const EVENT_KEY = "todorovnet.timing.event";
+const USER_KEY = "todorovnet.timing.user";
+// The Supabase client retries a failed read for several seconds; on a weak connection the app
+// stops waiting after this and shows the data saved on the phone.
+const READ_TIMEOUT_MS = 4000;
 const SYNC_EVERY_MS = 10_000;
 const CLOCK_EVERY_MS = 5 * 60_000;
 
@@ -55,16 +59,64 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
 
   // ── Session, service worker, connectivity ──
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: session }) => setUserId(session.session?.user.id ?? null));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUserId(session?.user.id ?? null));
+    // Offline, the auth client may never confirm the session. The app then continues as the last signed-in
+    // timekeeper: that only unlocks the local queue, and the database still checks every record on sync.
+    const cachedUser = () => {
+      try {
+        return localStorage.getItem(USER_KEY);
+      } catch {
+        return null;
+      }
+    };
+    const rememberUser = (id: string | null) => {
+      try {
+        if (id) localStorage.setItem(USER_KEY, id);
+        else localStorage.removeItem(USER_KEY);
+      } catch {
+        // Private mode: nothing to remember.
+      }
+    };
 
-    navigator.serviceWorker?.register("/sw.js").catch(() => undefined);
+    const fallback = setTimeout(() => setUserId((current) => (current === undefined ? cachedUser() : current)), 2500);
+    supabase.auth
+      .getSession()
+      .then(({ data: session }) => {
+        const id = session.session?.user.id ?? null;
+        if (id) rememberUser(id);
+        setUserId(id ?? (navigator.onLine ? null : cachedUser()));
+      })
+      .catch(() => setUserId(cachedUser()));
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        rememberUser(null);
+        setUserId(null);
+      } else if (session?.user.id) {
+        rememberUser(session.user.id);
+        setUserId(session.user.id);
+      }
+    });
+
+    // Register the worker and hand it this page plus the scripts already loaded, so a reload works offline
+    // even when the app was opened by an in-app navigation rather than a full page load.
+    navigator.serviceWorker
+      ?.register("/sw.js")
+      .then(() => navigator.serviceWorker.ready)
+      .then((registration) => {
+        const assets = performance
+          .getEntriesByType("resource")
+          .map((entry) => entry.name)
+          .filter((url) => url.startsWith(`${location.origin}/_next/static/`));
+        registration.active?.postMessage({ type: "cache-shell", urls: [location.pathname, ...assets] });
+      })
+      .catch(() => undefined);
 
     const update = () => setOnline(navigator.onLine);
     update();
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     return () => {
+      clearTimeout(fallback);
       listener.subscription.unsubscribe();
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
@@ -76,13 +128,20 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
     if (!userId) return;
     const key = `staff-events:${userId}`;
     (async () => {
-      const { data: rows, error } = await supabase
-        .from("event_staff")
-        .select("role, events(id, name, location, date_from, status)")
-        .eq("user_id", userId);
+      // Offline, skip the network entirely and use what was saved on the phone.
+      const response = navigator.onLine
+        ? await withTimeout(
+            supabase
+              .from("event_staff")
+              .select("role, events(id, name, location, date_from, status)")
+              .eq("user_id", userId),
+            READ_TIMEOUT_MS,
+          )
+        : null;
+      const rows = response && !response.error ? response.data : null;
 
       let list: StaffEvent[];
-      if (error || !rows) {
+      if (!rows) {
         list = (await loadSnapshot<StaffEvent[]>(key))?.data ?? [];
       } else {
         const byEvent = new Map<number, StaffEvent>();
@@ -109,7 +168,9 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
     localStorage.setItem(EVENT_KEY, String(eventId));
     const key = `event:${eventId}`;
     (async () => {
-      const fresh = await fetchEventData(supabase, eventId).catch(() => null);
+      const fresh = navigator.onLine
+        ? await withTimeout(fetchEventData(supabase, eventId), READ_TIMEOUT_MS).catch(() => null)
+        : null;
       if (fresh) {
         await saveSnapshot(key, fresh);
         setData(fresh);
@@ -121,7 +182,8 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       }
       setItems(await listItems(eventId));
     })();
-  }, [supabase, eventId]);
+    // Re-runs when the connection comes back, replacing saved data with fresh data.
+  }, [supabase, eventId, online]);
 
   // Default to the first stage once data arrives.
   const stage = data?.stages.find((s) => s.id === stageId) ?? data?.stages[0] ?? null;
@@ -129,6 +191,11 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   // ── Sync loop ──
   const sync = useCallback(async () => {
     if (eventId == null) return;
+    if (!navigator.onLine) {
+      setOnline(false);
+      setItems(await listItems(eventId));
+      return;
+    }
     const result = await syncQueue(supabase);
     if (result.offline) setOnline(false);
     setItems(await listItems(eventId));
@@ -147,7 +214,10 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
 
   // ── Clock offset: measured while online, last known value while offline ──
   useEffect(() => {
-    const measure = () => measureClockOffset(supabase).then((value) => setOffset(value ?? storedClockOffset()));
+    const measure = () =>
+      (navigator.onLine ? measureClockOffset(supabase) : Promise.resolve(null)).then((value) =>
+        setOffset(value ?? storedClockOffset()),
+      );
     const first = setTimeout(measure, 0);
     const timer = setInterval(measure, CLOCK_EVERY_MS);
     return () => {
@@ -451,6 +521,11 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       </ul>
     </>,
   );
+}
+
+/** Resolves to null when the work takes longer than `ms`; a rejection still rejects. */
+function withTimeout<T>(work: PromiseLike<T>, ms: number): Promise<T | null> {
+  return Promise.race([Promise.resolve(work), new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
 }
 
 async function fetchEventData(supabase: ReturnType<typeof createClient>, eventId: number): Promise<EventData> {

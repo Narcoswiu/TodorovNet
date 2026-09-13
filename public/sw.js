@@ -1,6 +1,6 @@
-// Service worker for the timing app. A marshal can reload /t while offline and keep recording:
+// Service worker for the timing app. A marshal can reload the app while offline and keep recording:
 // the recorded times themselves live in IndexedDB, this only keeps the app shell available.
-const SHELL_CACHE = "todorovnet-shell-v1";
+const SHELL_CACHE = "todorovnet-shell-v2";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -18,6 +18,26 @@ self.addEventListener("activate", (event) => {
         ),
       )
       .then(() => self.clients.claim()),
+  );
+});
+
+// The app is often reached by an in-app navigation (after signing in), which the worker never sees as a
+// page load. So the page sends its own URL and the scripts it already loaded, and they are cached here.
+self.addEventListener("message", (event) => {
+  const data = event.data;
+  if (!data || data.type !== "cache-shell" || !Array.isArray(data.urls)) return;
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) =>
+      Promise.all(
+        data.urls
+          .filter((url) => new URL(url, self.location.origin).origin === self.location.origin)
+          .map((url) =>
+            fetch(url, { credentials: "same-origin" })
+              .then((response) => (response.ok ? cache.put(url, response) : undefined))
+              .catch(() => undefined),
+          ),
+      ),
+    ),
   );
 });
 
@@ -52,14 +72,14 @@ self.addEventListener("fetch", (event) => {
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy));
+            caches.open(SHELL_CACHE).then((cache) => cache.put(url.pathname, copy));
           }
           return response;
         })
         .catch(async () => {
           const cache = await caches.open(SHELL_CACHE);
           return (
-            (await cache.match(request)) ??
+            (await cache.match(url.pathname)) ??
             (await cache.match("/bg/t")) ??
             (await cache.match("/en/t")) ??
             Response.error()
