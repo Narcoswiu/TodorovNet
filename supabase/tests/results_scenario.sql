@@ -85,6 +85,7 @@ begin
   insert into public.passings (client_id, event_id, stage_id, entry_id, point, passed_at) values
     (gen_random_uuid(), v_event, v_nav, e1, 'start',  t0 + interval '5 minutes'),              -- late start
     (gen_random_uuid(), v_event, v_nav, e1, 'finish', t0 + interval '4 hours'),
+    (gen_random_uuid(), v_event, v_nav, e2, 'start',  t0 + interval '20 seconds'),             -- sent off 10 s early
     (gen_random_uuid(), v_event, v_nav, e2, 'finish', t0 + interval '30 seconds' + interval '4 hours 20 minutes'),
     (gen_random_uuid(), v_event, v_nav, e3, 'finish', t0 + interval '7 hours 35 minutes');     -- after course close
 
@@ -110,6 +111,7 @@ begin
   assert got.position = 2 and got.points = 22, 'rider 1 second with 22, got ' || got.position || '/' || got.points;
 
   select * into got from public.navigation_results where stage_id = v_nav and entry_id = e2;
+  assert got.elapsed_s = 4 * 3600 + 20 * 60 + 10, 'early start is timed from the actual start, got ' || got.elapsed_s;
   assert got.penalty_s = 0, 'proposed penalty ignored';
   assert got.position = 1 and got.points = 25, 'rider 2 wins navigation with 25';
   assert got.gap_s = 0, 'leader gap is zero';
@@ -174,6 +176,13 @@ begin
   assert got.net_points = 62 and got.position = 1, 'season r2 62 first, got ' || got.net_points;
   select * into got from public.season_standings where season_id = v_season and rider_id = r3;
   assert got.net_points = 10, 'season r3 10';
+  assert got.gross_points = 10, 'interim (gross) sum kept alongside the net total';
+
+  -- ── Teams: one club, best Pro rider each round is 1st -> 30 team points per round ──
+  select * into got from public.team_round_results where event_id = v_event and club_id = v_club;
+  assert got.classes_scored = 1 and got.team_points = 30 and got.position = 1, 'team round: best Pro rider scores 30';
+  select * into got from public.team_season_standings where season_id = v_season and club_id = v_club;
+  assert got.team_points = 90 and got.rounds_scored = 3, 'team season: plain sum 90, got ' || got.team_points;
 
   -- ── Correction: voiding e2's navigation finish makes rider 1 the winner ──
   update public.passings set voided_at = now(), void_reason = 'wrong rider'

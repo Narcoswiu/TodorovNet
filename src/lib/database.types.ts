@@ -186,6 +186,7 @@ export type Database = {
       entries: {
         Row: {
           class_id: number
+          club_id: number | null
           created_at: string
           event_id: number
           id: number
@@ -196,6 +197,7 @@ export type Database = {
         }
         Insert: {
           class_id: number
+          club_id?: number | null
           created_at?: string
           event_id: number
           id?: never
@@ -206,6 +208,7 @@ export type Database = {
         }
         Update: {
           class_id?: number
+          club_id?: number | null
           created_at?: string
           event_id?: number
           id?: never
@@ -215,6 +218,13 @@ export type Database = {
           withdrawn?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "entries_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "entries_event_id_class_id_fkey"
             columns: ["event_id", "class_id"]
@@ -1224,7 +1234,10 @@ export type Database = {
           course_closes_at: string | null
           distance_km: number | null
           event_id: number
+          gap_before_seconds: number
+          riders_per_slot: number | null
           stage_id: number
+          start_interval_seconds: number | null
           start_order: number
         }
         Insert: {
@@ -1232,7 +1245,10 @@ export type Database = {
           course_closes_at?: string | null
           distance_km?: number | null
           event_id: number
+          gap_before_seconds?: number
+          riders_per_slot?: number | null
           stage_id: number
+          start_interval_seconds?: number | null
           start_order?: number
         }
         Update: {
@@ -1240,7 +1256,10 @@ export type Database = {
           course_closes_at?: string | null
           distance_km?: number | null
           event_id?: number
+          gap_before_seconds?: number
+          riders_per_slot?: number | null
           stage_id?: number
+          start_interval_seconds?: number | null
           start_order?: number
         }
         Relationships: [
@@ -1685,6 +1704,56 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "stages"
             referencedColumns: ["id", "event_id"]
+          },
+        ]
+      }
+      team_round_results: {
+        Row: {
+          classes_scored: number | null
+          club_id: number | null
+          event_id: number | null
+          position: number | null
+          team_points: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entries_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entries_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_season_standings: {
+        Row: {
+          club_id: number | null
+          position: number | null
+          rounds_scored: number | null
+          season_id: number | null
+          team_points: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entries_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
           },
         ]
       }

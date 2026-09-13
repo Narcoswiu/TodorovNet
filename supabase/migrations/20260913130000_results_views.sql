@@ -63,10 +63,12 @@ facts as (
         and rs.entry_id = b.entry_id) as manual_status
   from base b
 ),
+-- Start reference: a late rider's time runs from the scheduled slot (Р XII.3), but a rider sent off early
+-- is timed from the actual start (matches the published sheets). least() ignores a missing value.
 timed as (
   select
     f.*,
-    extract(epoch from f.finish_at - coalesce(f.scheduled_start, f.actual_start)) as elapsed_s,
+    extract(epoch from f.finish_at - least(f.scheduled_start, f.actual_start)) as elapsed_s,
     case
       when f.manual_status = 'dsq' or f.has_dsq                 then 'dsq'
       when f.manual_status = 'dns' or f.has_no_start_penalty    then 'dns'
@@ -345,7 +347,54 @@ select
   rank() over (partition by n.season_id, n.class_id order by n.net_points desc) as position
 from net n;
 
+-- ─────────────────────────────────────────────────────────────
+-- Team classification
+-- ─────────────────────────────────────────────────────────────
+-- Per round: each BFM-licensed club scores its best-placed rider in every team class (Pro, Expert, Standard)
+-- on the team scale; clubs scoring in more classes rank first, then by points. Р p.16–17
+create view public.team_round_results
+with (security_invoker = true)
+as
+with best as (
+  select rr.event_id, en.club_id, rr.class_id, min(rr.position) as best_position
+  from public.round_results rr
+  join public.entries en on en.id = rr.entry_id
+  join public.classes c on c.id = rr.class_id
+  join public.clubs cl on cl.id = en.club_id
+  where c.team_scoring and cl.bfm_licensed and rr.total_points > 0
+  group by rr.event_id, en.club_id, rr.class_id
+),
+per_club as (
+  select
+    b.event_id, b.club_id,
+    count(*) as classes_scored,
+    sum(coalesce(ps.points[b.best_position], 0)) as team_points
+  from best b
+  left join public.points_scales ps on ps.code = 'bgx_team'
+  group by b.event_id, b.club_id
+)
+select
+  p.*,
+  rank() over (partition by p.event_id order by p.classes_scored desc, p.team_points desc) as position
+from per_club p;
+
+-- Team season: plain sum, no dropped round.
+create view public.team_season_standings
+with (security_invoker = true)
+as
+select
+  ev.season_id,
+  t.club_id,
+  count(*) as rounds_scored,
+  sum(t.team_points) as team_points,
+  rank() over (partition by ev.season_id order by sum(t.team_points) desc) as position
+from public.team_round_results t
+join public.events ev on ev.id = t.event_id
+where ev.kind = 'championship_round' and ev.status in ('live', 'finished')
+group by ev.season_id, t.club_id;
+
 grant select on
   public.navigation_results, public.navigation_splits, public.session_results,
-  public.enduro_cross_results, public.round_results, public.season_standings
+  public.enduro_cross_results, public.round_results, public.season_standings,
+  public.team_round_results, public.team_season_standings
 to anon, authenticated;

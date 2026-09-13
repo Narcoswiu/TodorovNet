@@ -166,6 +166,7 @@ create table public.entries (
   rider_id    bigint not null references public.riders (id),
   class_id    bigint not null,
   race_number int    not null check (race_number > 0),
+  club_id     bigint references public.clubs (id) on delete set null, -- frozen at entry; a mid-season club change brings no points, Р p.16
   transponder text,
   withdrawn   boolean not null default false,
   created_at  timestamptz not null default now(),
@@ -174,6 +175,23 @@ create table public.entries (
   unique (id, event_id),
   foreign key (event_id, class_id) references public.event_classes (event_id, class_id)
 );
+
+create function public.entries_default_club()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.club_id is null then
+    select r.club_id into new.club_id from public.riders r where r.id = new.rider_id;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger entries_default_club
+  before insert on public.entries
+  for each row execute function public.entries_default_club();
 
 -- A stage is one scored part of an event: prologue, a navigation day, an enduro-cross day.
 create table public.stages (
@@ -195,9 +213,13 @@ create table public.stage_classes (
   stage_id         bigint not null,
   event_id         bigint not null,
   class_id         bigint not null,
-  start_order      int not null default 0,
-  distance_km      numeric(6, 1),
-  course_closes_at timestamptz, -- per-class override of the stage close time
+  start_order            int not null default 0,
+  distance_km            numeric(6, 1),
+  course_closes_at       timestamptz, -- per-class override of the stage close time
+  -- Start-list generation. Observed practice: Pro 1 rider per 30 s, other classes 2 per 30 s, 2–5 min between classes.
+  start_interval_seconds int check (start_interval_seconds > 0), -- null: use the stage default
+  riders_per_slot        int check (riders_per_slot > 0),
+  gap_before_seconds     int not null default 0 check (gap_before_seconds >= 0),
   primary key (stage_id, class_id),
   foreign key (stage_id, event_id) references public.stages (id, event_id) on delete cascade,
   foreign key (event_id, class_id) references public.event_classes (event_id, class_id) on delete cascade
