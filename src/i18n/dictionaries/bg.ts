@@ -21,6 +21,7 @@ export const bg = {
   nav: {
     events: "Състезания",
     timing: "Хронометраж",
+    archive: "Архив",
   },
   home: {
     heading: "Състезания",
@@ -29,6 +30,12 @@ export const bg = {
     finished: "Завършили",
     noEvents: "Няма публикувани състезания.",
     round: "Кръг {n}",
+    allFinished: "Всички минали състезания",
+  },
+  archive: {
+    title: "Архив на резултатите",
+    none: "Още няма завършили състезания.",
+    noEventsInYear: "Няма завършили състезания през тази година.",
   },
   event: {
     standings: "Класиране",

@@ -22,6 +22,7 @@ export const en: Dictionary = {
   nav: {
     events: "Events",
     timing: "Timing",
+    archive: "Archive",
   },
   home: {
     heading: "Events",
@@ -30,6 +31,12 @@ export const en: Dictionary = {
     finished: "Finished",
     noEvents: "No published events yet.",
     round: "Round {n}",
+    allFinished: "All past events",
+  },
+  archive: {
+    title: "Results archive",
+    none: "No finished events yet.",
+    noEventsInYear: "No finished events that year.",
   },
   event: {
     standings: "Standings",

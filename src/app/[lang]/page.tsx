@@ -7,6 +7,8 @@ import { transliterate } from "@/i18n/localize";
 import { formatDateRange } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
+const FINISHED_ON_HOME = 6;
+
 export default async function HomePage({ params }: PageProps<"/[lang]">) {
   const { lang } = await params;
   if (!hasLocale(lang)) notFound();
@@ -46,7 +48,9 @@ export default async function HomePage({ params }: PageProps<"/[lang]">) {
         {!events?.length && <p className="text-muted">{dict.home.noEvents}</p>}
 
         {groups.map(({ status, title }) => {
-          const list = (events ?? []).filter((event) => event.status === status);
+          const all = (events ?? []).filter((event) => event.status === status);
+          // Older results live in the archive, so the home page stays short.
+          const list = status === "finished" ? all.slice(0, FINISHED_ON_HOME) : all;
           if (!list.length) return null;
           return (
             <section key={status} className="mb-8">
@@ -75,6 +79,11 @@ export default async function HomePage({ params }: PageProps<"/[lang]">) {
                   </li>
                 ))}
               </ul>
+              {status === "finished" && (
+                <Link href={`/${lang}/archive`} className="mt-3 inline-block text-sm text-accent underline">
+                  {dict.home.allFinished}
+                </Link>
+              )}
             </section>
           );
         })}

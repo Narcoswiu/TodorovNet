@@ -597,6 +597,23 @@ function cp1251(text) {
     return "bg + en";
   });
 
+  await step("results archive: one section per year with finished events or seasons, BG and EN", async () => {
+    const page = await browser.newPage();
+    await page.goto(`${APP}/bg`, { waitUntil: "networkidle2" });
+    await page.evaluate(() => [...document.querySelectorAll("header a")].find((a) => a.textContent.trim() === "Архив").click());
+    await waitText(page, "Архив на резултатите");
+    if (!page.url().endsWith("/bg/archive")) throw new Error(page.url());
+    const expected = sql(
+      `select count(*) from (select extract(year from date_from)::int from events where status = 'finished' union select year from seasons) y`,
+    );
+    const shown = String(await page.evaluate(() => document.querySelectorAll("section[data-year]").length));
+    if (shown !== expected) throw new Error(`years shown ${shown}, expected ${expected}`);
+    await page.goto(`${APP}/en/archive`, { waitUntil: "networkidle2" });
+    await waitText(page, "Results archive");
+    await page.close();
+    return `${shown} years`;
+  });
+
   await step("live standings fall back to polling an edge-cached endpoint (?live=poll)", async () => {
     const response = await fetch(`${APP}/api/live/${demoEvent}?stage=${demoStage}`);
     const cache = response.headers.get("cache-control") ?? "";

@@ -11,6 +11,9 @@ export function SiteHeader({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           Todorov<span className="text-accent">NET</span>
         </Link>
         <div className="flex items-center gap-4">
+          <Link href={`/${lang}/archive`} className="text-sm text-muted hover:text-foreground">
+            {dict.nav.archive}
+          </Link>
           <Link href={`/${lang}/t`} className="text-sm text-muted hover:text-foreground">
             {dict.nav.timing}
           </Link>
