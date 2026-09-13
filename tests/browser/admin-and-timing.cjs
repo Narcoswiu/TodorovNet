@@ -652,6 +652,63 @@ function cp1251(text) {
     if (active !== "0") throw new Error(`still active: ${active}`);
   });
 
+  await step("SOS from the timing app reaches the jury's Messages tab live, and is resolved", async () => {
+    const note = `паднал състезател ${stamp}`;
+    await chair.goto(`${APP}/bg/admin/events/${demoEvent}/messages`, { waitUntil: "networkidle2" });
+    await sleep(1500);
+    await typeNumber(timer, riders[0]);
+    await clickButton(timer, "🆘 SOS / Съобщение");
+    await timer.evaluate((value) => {
+      const area = document.querySelector('textarea[name="course_message"]');
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(area, value);
+      area.dispatchEvent(new Event("input", { bubbles: true }));
+    }, note);
+    await clickButton(timer, "Изпрати SOS");
+    await waitText(timer, "SOS е записан");
+    // The jury page updates by itself through realtime: no reload.
+    await waitText(chair, note, 20000);
+    await waitText(chair, "1 отворени SOS");
+    await clickButton(chair, "Решено", note);
+    for (let i = 0; i < 20 && sql(`select count(*) from marshal_messages where body = '${note}' and resolved_at is not null`) !== "1"; i++) await sleep(500);
+    const row = sql(`select kind || '/' || race_number || '/' || (resolved_at is not null) from marshal_messages where body = '${note}'`);
+    if (row !== `sos/${riders[0]}/true`) throw new Error(row);
+    return "live delivery and resolve";
+  });
+
+  await step("timekeeper starts an enduro-cross heat and raises the red flag from the phone", async () => {
+    const exStage = sql(`select id from stages where event_id = ${demoEvent} and type = 'enduro_cross' order by id limit 1`);
+    const exSession = sql(`select id from sessions where stage_id = ${exStage} and started_at is null and red_flag_at is null order by id limit 1`);
+    if (!exSession) throw new Error("no unstarted heat: run `npx supabase db reset`");
+    const choose = (index, value) =>
+      timer.evaluate(
+        (i, v) => {
+          const select = document.querySelectorAll("select")[i];
+          Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, v);
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        },
+        index,
+        value,
+      );
+    const pressStartingWith = (prefix) =>
+      timer.evaluate((p) => {
+        const button = [...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(p));
+        if (!button) throw new Error(`no button "${p}"`);
+        button.click();
+      }, prefix);
+    const selectIndex = await timer.evaluate(() => [...document.querySelectorAll("select")].findIndex((s) => [...s.options].some((o) => o.textContent.includes("Ендурокрос"))));
+    await choose(selectIndex, exStage);
+    await sleep(500);
+    await choose(selectIndex + 1, exSession);
+    await sleep(500);
+    await pressStartingWith("▶");
+    for (let i = 0; i < 20 && sql(`select started_at is not null from sessions where id = ${exSession}`) !== "t"; i++) await sleep(500);
+    await pressStartingWith("⚑");
+    await waitText(timer, "Червен флаг ");
+    const row = sql(`select (started_at is not null) || '/' || (red_flag_at is not null) from sessions where id = ${exSession}`);
+    if (row !== "true/true") throw new Error(row);
+    return `session ${exSession}`;
+  });
+
   await step("timing app reopens offline (service worker)", async () => {
     await sleep(1000);
     await timer.setOfflineMode(true);

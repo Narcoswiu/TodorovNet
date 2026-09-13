@@ -15,10 +15,12 @@ export type QueueStatus = "pending" | "synced" | "rejected" | "voided";
 
 type PassingRow = Omit<TablesInsert<"passings">, "client_id">;
 type LapRow = Omit<TablesInsert<"laps">, "client_id">;
+type MessageRow = Omit<TablesInsert<"marshal_messages">, "client_id">;
 
 export type QueueItem =
   | (QueueItemBase & { table: "passings"; payload: PassingRow })
-  | (QueueItemBase & { table: "laps"; payload: LapRow });
+  | (QueueItemBase & { table: "laps"; payload: LapRow })
+  | (QueueItemBase & { table: "marshal_messages"; payload: MessageRow });
 
 type QueueItemBase = {
   client_id: string;
@@ -59,7 +61,8 @@ function getDb() {
 export async function enqueue(
   item:
     | { table: "passings"; event_id: number; label: string; payload: PassingRow }
-    | { table: "laps"; event_id: number; label: string; payload: LapRow },
+    | { table: "laps"; event_id: number; label: string; payload: LapRow }
+    | { table: "marshal_messages"; event_id: number; label: string; payload: MessageRow },
 ): Promise<QueueItem> {
   const stored = {
     ...item,
@@ -98,6 +101,7 @@ export async function voidOnServer(
   item: QueueItem,
   reason: string,
 ): Promise<boolean> {
+  if (item.table === "marshal_messages") return false;
   const values = { voided_at: new Date().toISOString(), void_reason: reason };
   const { data, error } =
     item.table === "passings"
@@ -131,7 +135,9 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
     const { error } =
       item.table === "passings"
         ? await supabase.from("passings").insert({ ...item.payload, client_id: item.client_id })
-        : await supabase.from("laps").insert({ ...item.payload, client_id: item.client_id });
+        : item.table === "laps"
+          ? await supabase.from("laps").insert({ ...item.payload, client_id: item.client_id })
+          : await supabase.from("marshal_messages").insert({ ...item.payload, client_id: item.client_id });
 
     if (error && isNetworkError(error)) {
       await db.put("items", { ...item, attempts: item.attempts + 1 });

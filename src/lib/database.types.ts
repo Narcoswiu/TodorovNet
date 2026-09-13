@@ -457,6 +457,99 @@ export type Database = {
           },
         ]
       }
+      marshal_messages: {
+        Row: {
+          accuracy_m: number | null
+          body: string
+          checkpoint_id: number | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          event_id: number
+          id: number
+          kind: Database["public"]["Enums"]["message_kind"]
+          lat: number | null
+          lon: number | null
+          race_number: number | null
+          resolved_at: string | null
+          resolved_by: string | null
+          sent_at: string
+          stage_id: number | null
+        }
+        Insert: {
+          accuracy_m?: number | null
+          body?: string
+          checkpoint_id?: number | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          event_id: number
+          id?: never
+          kind: Database["public"]["Enums"]["message_kind"]
+          lat?: number | null
+          lon?: number | null
+          race_number?: number | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          sent_at: string
+          stage_id?: number | null
+        }
+        Update: {
+          accuracy_m?: number | null
+          body?: string
+          checkpoint_id?: number | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          event_id?: number
+          id?: never
+          kind?: Database["public"]["Enums"]["message_kind"]
+          lat?: number | null
+          lon?: number | null
+          race_number?: number | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          sent_at?: string
+          stage_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marshal_messages_checkpoint_id_fkey"
+            columns: ["checkpoint_id"]
+            isOneToOne: false
+            referencedRelation: "checkpoints"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marshal_messages_checkpoint_id_fkey"
+            columns: ["checkpoint_id"]
+            isOneToOne: false
+            referencedRelation: "navigation_splits"
+            referencedColumns: ["checkpoint_id"]
+          },
+          {
+            foreignKeyName: "marshal_messages_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marshal_messages_stage_id_event_id_fkey"
+            columns: ["stage_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "navigation_results"
+            referencedColumns: ["stage_id", "event_id"]
+          },
+          {
+            foreignKeyName: "marshal_messages_stage_id_event_id_fkey"
+            columns: ["stage_id", "event_id"]
+            isOneToOne: false
+            referencedRelation: "stages"
+            referencedColumns: ["id", "event_id"]
+          },
+        ]
+      }
       passings: {
         Row: {
           checkpoint_id: number | null
@@ -2104,6 +2197,7 @@ export type Database = {
       event_status: "draft" | "upcoming" | "live" | "finished"
       fact_source: "manual" | "import" | "device"
       license_type: "promo" | "enduro_a" | "enduro_b" | "one_event" | "foreign"
+      message_kind: "sos" | "info"
       passing_point: "start" | "checkpoint" | "finish"
       penalty_kind:
         | "time"
@@ -2265,6 +2359,7 @@ export const Constants = {
       event_status: ["draft", "upcoming", "live", "finished"],
       fact_source: ["manual", "import", "device"],
       license_type: ["promo", "enduro_a", "enduro_b", "one_event", "foreign"],
+      message_kind: ["sos", "info"],
       passing_point: ["start", "checkpoint", "finish"],
       penalty_kind: ["time", "time_per_unit", "dsq", "dnf", "no_start", "fine"],
       protest_status: ["filed", "upheld", "rejected", "withdrawn"],

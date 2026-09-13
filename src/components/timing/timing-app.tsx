@@ -25,6 +25,7 @@ type EventData = {
     number: number;
     group_label: string | null;
     started_at: string | null;
+    red_flag_at: string | null;
   }[];
   classes: { id: number; name: string; name_en: string | null }[];
   entries: { id: number; race_number: number; class_id: number; first_name: string; last_name: string }[];
@@ -57,6 +58,8 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   const [manualDate, setManualDate] = useState("");
   const [manualTime, setManualTime] = useState("");
   const [confirmVoid, setConfirmVoid] = useState<string | null>(null);
+  const [sosOpen, setSosOpen] = useState(false);
+  const [messageText, setMessageText] = useState("");
   const [items, setItems] = useState<QueueItem[]>([]);
   const [offset, setOffset] = useState<number | null>(null);
   const [online, setOnline] = useState(true);
@@ -310,6 +313,57 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
     sync();
   }
 
+  async function redFlag() {
+    if (!session || !data) return;
+    const flaggedAt = correctedNow(offset ?? 0).toISOString();
+    const { error } = await supabase
+      .from("sessions")
+      .update({ red_flag_at: flaggedAt, red_flag_decision: null })
+      .eq("id", session.id);
+    if (error) {
+      setMessage({ text: error.message, tone: "bad" });
+      return;
+    }
+    setData({ ...data, sessions: data.sessions.map((s) => (s.id === session.id ? { ...s, red_flag_at: flaggedAt } : s)) });
+  }
+
+  /** Location of this phone, if the browser allows it within a few seconds. Never blocks sending. */
+  function currentPosition(): Promise<GeolocationPosition | null> {
+    if (!("geolocation" in navigator)) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { enableHighAccuracy: true, timeout: 5000, maximumAge: 60_000 });
+    });
+  }
+
+  async function sendMessage(kind: "sos" | "info") {
+    if (eventId == null) return;
+    const position = await currentPosition();
+    const number = typedNumber != null && typedEntry ? typedNumber : null;
+    const isCheckpoint = point.startsWith("cp:");
+    await enqueue({
+      table: "marshal_messages",
+      event_id: eventId,
+      label: `${kind === "sos" ? dict.timing.sosLabel : dict.timing.infoLabel}${number ? ` · #${number}` : ""}`,
+      payload: {
+        event_id: eventId,
+        stage_id: stage?.id ?? null,
+        checkpoint_id: isCheckpoint && stage?.type === "navigation" ? Number(point.slice(3)) : null,
+        kind,
+        race_number: number,
+        body: messageText.trim(),
+        lat: position?.coords.latitude ?? null,
+        lon: position?.coords.longitude ?? null,
+        accuracy_m: position?.coords.accuracy ?? null,
+        sent_at: correctedNow(offset ?? 0).toISOString(),
+      },
+    });
+    setMessage({ text: kind === "sos" ? dict.timing.sosQueued : dict.timing.infoQueued, tone: kind === "sos" ? "bad" : "good" });
+    setSosOpen(false);
+    setMessageText("");
+    setItems(await listItems(eventId));
+    sync();
+  }
+
   async function voidItem(item: QueueItem) {
     setConfirmVoid(null);
     if (eventId == null) return;
@@ -468,6 +522,23 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         </button>
       )}
 
+      {stage?.type === "enduro_cross" && session?.started_at && (
+        session.red_flag_at ? (
+          <p className="mb-3 rounded-md bg-bad px-3 py-2 text-center text-sm font-semibold text-white">
+            {t(dict.timing.redFlagSet, { time: formatClock(session.red_flag_at) })}
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={redFlag}
+            disabled={!online}
+            className="mb-3 w-full rounded-md border-2 border-bad py-2 text-sm font-bold text-bad disabled:opacity-50"
+          >
+            ⚑ {dict.timing.redFlag} · {sessionLabel(session)}
+          </button>
+        )
+      )}
+
       <div className="mb-3 rounded-lg border border-border bg-card p-4 text-center">
         <div className="text-xs text-muted">{dict.timing.raceNumber}</div>
         <div className="font-mono text-5xl font-semibold tabular-nums" aria-live="polite">
@@ -552,10 +623,42 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         </p>
       )}
 
+      <div className="mb-3 mt-4 rounded-lg border border-bad p-3">
+        {sosOpen ? (
+          <div className="space-y-2">
+            <p className="text-xs text-muted">{dict.timing.sosHelp}</p>
+            <textarea
+              name="course_message"
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              placeholder={dict.timing.messagePlaceholder}
+              rows={2}
+              className="block w-full rounded-md border border-border bg-background px-3 py-2 text-base"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => sendMessage("sos")} className="h-14 rounded-lg bg-bad text-lg font-bold text-white">
+                {dict.timing.sosConfirm}
+              </button>
+              <button type="button" onClick={() => sendMessage("info")} className="h-14 rounded-lg border border-border text-sm font-medium">
+                {dict.timing.sendInfo}
+              </button>
+            </div>
+            <button type="button" onClick={() => setSosOpen(false)} className="w-full text-xs text-muted underline">
+              {dict.common.cancel}
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setSosOpen(true)} className="h-12 w-full rounded-lg font-bold text-bad">
+            🆘 {dict.timing.sos} / {dict.timing.message}
+          </button>
+        )}
+      </div>
+
       <h2 className="mb-2 mt-4 text-sm font-medium text-muted">{dict.timing.recent}</h2>
       <ul className="divide-y divide-border rounded-lg border border-border bg-card">
         {items.slice(0, 30).map((item) => {
-          const at = item.table === "passings" ? item.payload.passed_at : item.payload.crossed_at;
+          const at =
+            item.table === "passings" ? item.payload.passed_at : item.table === "laps" ? item.payload.crossed_at : item.payload.sent_at;
           return (
             <li key={item.client_id} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
               <div>
@@ -575,6 +678,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
                   }
                 </div>
                 {item.status === "synced" &&
+                  item.table !== "marshal_messages" &&
                   (confirmVoid === item.client_id ? (
                     <button type="button" onClick={() => voidItem(item)} className="mt-1 text-xs font-medium text-bad underline">
                       {dict.timing.voidConfirm}
@@ -609,7 +713,7 @@ async function fetchEventData(supabase: ReturnType<typeof createClient>, eventId
     supabase.from("checkpoints").select("id, stage_id, code, name, name_en").eq("event_id", eventId).order("sort_order"),
     supabase
       .from("sessions")
-      .select("id, stage_id, class_id, kind, number, group_label, started_at")
+      .select("id, stage_id, class_id, kind, number, group_label, started_at, red_flag_at")
       .eq("event_id", eventId)
       .order("class_id")
       .order("kind")

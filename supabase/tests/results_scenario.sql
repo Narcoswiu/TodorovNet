@@ -493,6 +493,23 @@ begin
     assert v_issues = '555:true 901:false', 'registry eligibility, got ' || v_issues;
   end;
 
+  -- ── Course messages: an SOS is stored once even when the phone resends it ──
+  declare
+    v_sos uuid := gen_random_uuid();
+    failed boolean := false;
+  begin
+    insert into public.marshal_messages (client_id, event_id, stage_id, kind, race_number, body, lat, lon, sent_at)
+    values (v_sos, v_event, v_nav, 'sos', 11, 'падане, не става', 41.33, 25.36, now());
+    begin
+      insert into public.marshal_messages (client_id, event_id, kind, sent_at) values (v_sos, v_event, 'sos', now());
+    exception when unique_violation then
+      failed := true;
+    end;
+    assert failed, 'resent SOS is not duplicated';
+    update public.marshal_messages set resolved_at = now(), resolved_by = auth.uid() where client_id = v_sos;
+    assert (select resolved_at is not null from public.marshal_messages where client_id = v_sos), 'SOS resolved';
+  end;
+
   raise notice 'results scenario: all assertions passed';
 end;
 $$;
@@ -546,6 +563,16 @@ begin
     failed := true;
   end;
   assert failed, 'a user cannot make themselves super admin';
+
+  failed := false;
+  begin
+    insert into public.marshal_messages (client_id, event_id, kind, body, sent_at)
+    values (gen_random_uuid(), v_event, 'sos', 'fake', now());
+  exception when insufficient_privilege then
+    failed := true;
+  end;
+  assert failed, 'non-staff cannot send course messages';
+  assert (select count(*) from public.marshal_messages) = 0, 'non-staff cannot read course messages';
   raise notice 'access rules (outsider): all assertions passed';
 end;
 $$;
