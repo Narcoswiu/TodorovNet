@@ -515,4 +515,71 @@ export const en: Dictionary = {
     submit: "Sign in",
     invalid: "Wrong email or password.",
   },
+  footer: {
+    privacy: "Privacy and personal data",
+  },
+  privacy: {
+    title: "Privacy and personal data",
+    updated: "Last updated: 13 September 2026",
+    intro:
+      "TodorovNET is a timing and results system for motorcycle competitions. This page explains which personal data is processed, who can see it and what rights you have under the General Data Protection Regulation (GDPR).",
+    contact: "The system is run by {operator}. For questions and requests about your personal data, write to {email}.",
+    contactOrganizer: "For questions and requests about your personal data, contact the organizer of the event.",
+    sections: [
+      {
+        heading: "Who is responsible for the data",
+        body: [
+          "The organizer of each event (the club or the federation) decides which data about riders is collected at entry. TodorovNET stores and processes it on the organizer's behalf to calculate and publish the results.",
+        ],
+      },
+      {
+        heading: "What is published",
+        body: [
+          "Name, country, club, race number, class, start time, split and finish times, penalties, statuses (such as DNF or DSQ), points and standings. In the English version, names are written in Latin letters.",
+          "For a GPS penalty, the evidence the rulebook requires is also published: a map of the spot and the section of the track around it.",
+          "The basis is the legitimate interest of organizers and riders: standings are a public sporting result under the championship rules.",
+        ],
+      },
+      {
+        heading: "What is not published",
+        body: [
+          "Date of birth, phone, email, licence details, blood group, notes and full GPS tracks. Only the organizer and the jury of that event can see them.",
+          "Date of birth and licence are used to check that a rider is eligible for the class. Phone and blood group are for safety in case of an incident; blood group is health data and is collected only with your explicit consent.",
+        ],
+      },
+      {
+        heading: "Officials and timekeepers",
+        body: [
+          "For signing in, we keep email, name and password (the password is stored only in encrypted form). Every change to times, penalties and results is recorded with its author and time so the jury can check it.",
+          "When an SOS or a course message is sent, the phone's location at that moment is recorded, if the device allows it.",
+        ],
+      },
+      {
+        heading: "Cookies",
+        body: [
+          "Only necessary cookies are used: for officials' sign-in and for the chosen language (kept for 1 year). There are no ads, analytics or tracking. The timing app keeps records on the phone while there is no connection and sends them as soon as it can.",
+        ],
+      },
+      {
+        heading: "Where the data is stored",
+        body: [
+          "The database and files are hosted by Supabase and the site is served by Vercel, in data centres in the European Union. Both providers process the data under a GDPR data processing agreement.",
+        ],
+      },
+      {
+        heading: "How long",
+        body: [
+          "Results and standings remain as the championship's sporting archive. Contact details, blood group, notes and GPS tracks are kept only as long as they are needed for the event and the season, including the protest periods, and are then deleted.",
+        ],
+      },
+      {
+        heading: "Your rights",
+        body: [
+          "You have the right to access your data, to have it corrected or erased, to restrict processing, to object and to data portability. Withdrawing consent does not affect processing that happened before.",
+          "Results declared official are not erased, because they are part of the official standings, but wrong data in them is corrected.",
+          "If you believe your rights have been infringed, you can complain to the Bulgarian Commission for Personal Data Protection (www.cpdp.bg).",
+        ],
+      },
+    ],
+  },
 };

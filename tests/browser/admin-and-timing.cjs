@@ -573,6 +573,18 @@ function cp1251(text) {
     return `${code}, evidence PNG ${Math.round((await image.arrayBuffer()).byteLength / 1024)} KB`;
   });
 
+  await step("privacy page linked from the footer, in Bulgarian and English", async () => {
+    const page = await browser.newPage();
+    await page.goto(`${APP}/bg`, { waitUntil: "networkidle2" });
+    await page.evaluate(() => [...document.querySelectorAll("footer a")].find((a) => a.textContent.includes("Поверителност")).click());
+    await waitText(page, "Комисията за защита на личните данни");
+    if (!page.url().endsWith("/bg/privacy")) throw new Error(page.url());
+    await page.goto(`${APP}/en/privacy`, { waitUntil: "networkidle2" });
+    await waitText(page, "Commission for Personal Data Protection");
+    await page.close();
+    return "bg + en";
+  });
+
   // ───────────── Timekeeper: timing app, offline and back ─────────────
   const timerContext = await browser.createBrowserContext();
   let timer;
