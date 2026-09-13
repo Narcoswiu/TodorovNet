@@ -15,7 +15,7 @@ async function loadEvent(eventId: number) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("events")
-    .select("id, name, location, date_from, date_to, status, round_number")
+    .select("id, name, location, date_from, date_to, status, round_number, season_id, kind")
     .eq("id", eventId)
     .maybeSingle();
   return data;
@@ -92,6 +92,11 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
               .filter(Boolean)
               .join(" · ")}
           </p>
+          {event.kind === "championship_round" && event.season_id && (
+            <Link href={`/${lang}/s/${event.season_id}`} className="mt-1 inline-block text-sm text-accent underline">
+              {dict.season.link}
+            </Link>
+          )}
         </div>
 
         <nav className="-mx-4 mb-4 flex gap-1 overflow-x-auto px-4" aria-label={dict.event.standings}>

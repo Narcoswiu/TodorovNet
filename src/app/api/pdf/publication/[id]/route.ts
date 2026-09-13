@@ -1,5 +1,6 @@
-import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
+import type { DocumentProps } from "@react-pdf/renderer";
 import { createElement, type ReactElement } from "react";
+import { renderPdf } from "@/lib/pdf/render";
 import { defaultLocale, hasLocale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
 import { formatClock } from "@/lib/format";
@@ -31,7 +32,7 @@ export async function GET(request: Request, { params }: RouteContext<"/api/pdf/p
     published_by_name: publication.published_by_name,
   };
 
-  const pdf = await renderToBuffer(
+  const pdf = await renderPdf(
     createElement(ResultsDocument, {
       lang,
       dict: getDictionary(lang),

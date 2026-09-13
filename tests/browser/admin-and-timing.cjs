@@ -305,6 +305,18 @@ function cp1251(text) {
     return "BG and EN (transliterated)";
   });
 
+  await step("season standings pages (riders and teams, BG and EN)", async () => {
+    const seasonId = sql(`select id from seasons where year = 2026`);
+    const visitor = await browser.newPage();
+    await visitor.goto(`${APP}/bg/s/${seasonId}`, { waitUntil: "networkidle2" });
+    await waitText(visitor, "Генерално класиране 2026");
+    await waitText(visitor, "Сбор");
+    await visitor.goto(`${APP}/en/s/${seasonId}?view=team`, { waitUntil: "networkidle2" });
+    await waitText(visitor, "Championship standings 2026");
+    await waitText(visitor, "Teams: each club");
+    await visitor.close();
+  });
+
   await step("admin adds a time by hand, then voids it with a reason", async () => {
     await admin.goto(`${APP}/bg/admin/events/${eventId}/timing?stage=${stageId}`, { waitUntil: "networkidle2" });
     await submitForm(admin, "Добави време ръчно", { race_number: "500", point: "finish", date: "2026-10-10", time: "13:05:07" });

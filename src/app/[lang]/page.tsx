@@ -13,11 +13,14 @@ export default async function HomePage({ params }: PageProps<"/[lang]">) {
   const dict = getDictionary(lang);
 
   const supabase = await createClient();
-  const { data: events } = await supabase
-    .from("events")
-    .select("id, name, location, date_from, date_to, status, round_number")
-    .neq("status", "draft")
-    .order("date_from", { ascending: false });
+  const [{ data: events }, { data: seasons }] = await Promise.all([
+    supabase
+      .from("events")
+      .select("id, name, location, date_from, date_to, status, round_number")
+      .neq("status", "draft")
+      .order("date_from", { ascending: false }),
+    supabase.from("seasons").select("id, year, name").order("year", { ascending: false }),
+  ]);
 
   const groups = [
     { status: "live", title: dict.home.live },
@@ -31,7 +34,14 @@ export default async function HomePage({ params }: PageProps<"/[lang]">) {
     <>
       <SiteHeader lang={lang} dict={dict} />
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
-        <h1 className="mb-6 text-2xl font-semibold tracking-tight">{dict.home.heading}</h1>
+        <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{dict.home.heading}</h1>
+          {(seasons ?? []).slice(0, 2).map((season) => (
+            <Link key={season.id} href={`/${lang}/s/${season.id}`} className="text-sm text-accent underline">
+              {t(dict.season.heading, { year: season.year })}
+            </Link>
+          ))}
+        </div>
 
         {!events?.length && <p className="text-muted">{dict.home.noEvents}</p>}
 

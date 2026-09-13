@@ -1652,9 +1652,11 @@ export type Database = {
       season_standings: {
         Row: {
           class_id: number | null
+          drop_applies: boolean | null
           gross_points: number | null
           net_points: number | null
           position: number | null
+          position_gross: number | null
           rider_id: number | null
           rounds_held: number | null
           rounds_ridden: number | null
