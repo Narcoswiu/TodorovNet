@@ -42,6 +42,34 @@ export function SelectField({
   );
 }
 
+export function TextAreaField({
+  label,
+  name,
+  className,
+  ...textarea
+}: BaseProps & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "name">) {
+  return (
+    <label className={`block text-xs text-muted ${className ?? ""}`}>
+      {label}
+      <textarea name={name} rows={3} className={control} {...textarea} />
+    </label>
+  );
+}
+
+export function CheckboxField({
+  label,
+  name,
+  className,
+  ...input
+}: BaseProps & Omit<React.InputHTMLAttributes<HTMLInputElement>, "name" | "type">) {
+  return (
+    <label className={`flex items-center gap-2 text-sm ${className ?? ""}`}>
+      <input type="checkbox" name={name} value="true" className="size-4 accent-[var(--accent)]" {...input} />
+      {label}
+    </label>
+  );
+}
+
 export function Card({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <section className="mb-6 rounded-lg border border-border bg-card p-4">

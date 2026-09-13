@@ -380,6 +380,76 @@ function cp1251(text) {
     return "public standings show DNF";
   });
 
+  // ───────────── Publication, official results, protests ─────────────
+  const clickInCard = (page, cardText, buttonText) =>
+    page.evaluate(
+      (cardText, buttonText) => {
+        const card = [...document.querySelectorAll("section")].find((s) => s.innerText.includes(cardText));
+        if (!card) throw new Error(`no card "${cardText}"`);
+        const button = [...card.querySelectorAll("button[type=submit]")].find((b) => b.textContent.trim() === buttonText);
+        if (!button) throw new Error(`no button "${buttonText}" in "${cardText}"`);
+        button.click();
+      },
+      cardText,
+      buttonText,
+    );
+
+  await step("publish provisional results; public page shows status and a working PDF", async () => {
+    await admin.goto(`${APP}/bg/admin/events/${demoEvent}/results`, { waitUntil: "networkidle2" });
+    await clickInCard(admin, "Навигация", "Публикувай предварителни");
+    await waitText(admin, "Публикувано като версия 1.");
+    const visitor = await browser.newPage();
+    await visitor.goto(`${APP}/bg/e/${demoEvent}?stage=${demoStage}`, { waitUntil: "networkidle2" });
+    await waitText(visitor, "Предварителни резултати");
+    const pdf = await visitor.evaluate(async () => {
+      const link = [...document.querySelectorAll("a")].find((a) => a.textContent.trim() === "PDF");
+      const response = await fetch(link.href);
+      return { type: response.headers.get("content-type"), size: (await response.arrayBuffer()).byteLength };
+    });
+    await visitor.close();
+    if (pdf.type !== "application/pdf" || pdf.size < 10000) throw new Error(JSON.stringify(pdf));
+    return `PDF ${Math.round(pdf.size / 1024)} KB`;
+  });
+
+  let chair;
+  await step("GPS judge has no Publishing tab; jury chair declares results official", async () => {
+    await gps.goto(`${APP}/bg/admin/events/${demoEvent}/penalties`, { waitUntil: "networkidle2" });
+    if (await gps.evaluate(() => [...document.querySelectorAll("nav a")].some((a) => a.textContent.trim() === "Публикуване"))) {
+      throw new Error("GPS judge sees the Publishing tab");
+    }
+    chair = await login(juryContext, "jury@demo.local", "/bg/admin");
+    await chair.goto(`${APP}/bg/admin/events/${demoEvent}/results`, { waitUntil: "networkidle2" });
+    await clickInCard(chair, "Навигация", "Обяви официални");
+    await waitText(chair, "Публикувано като версия 2.");
+    const visitor = await browser.newPage();
+    await visitor.goto(`${APP}/en/e/${demoEvent}?stage=${demoStage}`, { waitUntil: "networkidle2" });
+    await waitText(visitor, "Official results");
+    await visitor.close();
+    const signer = sql(`select published_by_name from publications where event_id = ${demoEvent} and stage_id = ${demoStage} and version = 2`);
+    return `signed by ${signer}`;
+  });
+
+  await step("protest filed within the window, upheld by the jury, fee refunded", async () => {
+    const fact = `Грешно време на финала ${stamp}`;
+    await chair.goto(`${APP}/bg/admin/events/${demoEvent}/protests`, { waitUntil: "networkidle2" });
+    await submitForm(chair, "Подай протест", { type: "result", stage_id: String(demoStage), filed_by: "101", against: "103", fact, fee_paid: true });
+    await waitText(chair, "Протестът е записан.");
+    await chair.evaluate((fact) => {
+      const item = [...document.querySelectorAll("li")].find((li) => li.innerText.includes(fact));
+      const form = [...item.querySelectorAll("form")].find((f) => [...f.querySelectorAll("button")].some((b) => b.textContent.trim() === "Уважи"));
+      form.querySelector("textarea").value = "Проверено по видеото";
+      form.querySelector("button[type=submit]").click();
+    }, fact);
+    await chair.waitForFunction(
+      (fact) => [...document.querySelectorAll("li")].some((li) => li.innerText.includes(fact) && li.innerText.includes("Уважен")),
+      { timeout: 15000 },
+      fact,
+    );
+    const row = sql(`select status || '/' || fee_refunded || '/' || (deadline_at is not null) from protests where fact = '${fact}'`);
+    if (row !== "upheld/true/true") throw new Error(row);
+    return "status upheld, refunded, deadline set";
+  });
+
   // ───────────── Timekeeper: timing app, offline and back ─────────────
   const timerContext = await browser.createBrowserContext();
   let timer;

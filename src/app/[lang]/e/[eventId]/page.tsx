@@ -60,10 +60,16 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
     ? { kind: selectedStage.type === "enduro_cross" ? "enduro_cross" : "navigation", stageId: selectedStage.id }
     : { kind: "round" };
   const showStartList = viewParam === "start" && selectedStage?.type === "navigation";
-  const [view, startSlots] = await Promise.all([
+  const [view, startSlots, { data: latestPublications }] = await Promise.all([
     showStartList ? null : loadView(supabase, eventId, selector),
     showStartList && selectedStage ? loadStartList(supabase, selectedStage.id) : null,
+    supabase
+      .from("publications")
+      .select("id, stage_id, state, version, published_at, protest_deadline_at, published_by_name")
+      .eq("event_id", eventId)
+      .order("published_at", { ascending: false }),
   ]);
+  const publication = (latestPublications ?? []).find((pub) => pub.stage_id === (selectedStage?.id ?? null));
 
   const text = (value: string) => (lang === "en" ? transliterate(value) : value);
   const tabClass = (active: boolean) =>
@@ -127,10 +133,50 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
           </div>
         )}
 
-        {showStartList ? (
-          <StartList lang={lang} dict={dict} slots={startSlots ?? []} classes={classes} entries={entries} />
+        {showStartList && selectedStage ? (
+          <>
+            {(startSlots?.length ?? 0) > 0 && (
+              <p className="mb-3 text-sm">
+                <a href={`/api/pdf/start-list/${selectedStage.id}?lang=${lang}`} target="_blank" rel="noreferrer" className="text-accent underline">
+                  {dict.pdf.startList} · PDF
+                </a>
+              </p>
+            )}
+            <StartList lang={lang} dict={dict} slots={startSlots ?? []} classes={classes} entries={entries} />
+          </>
         ) : (
           view && (
+            <>
+            <div
+              className={`mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${
+                publication?.state === "official"
+                  ? "border-good text-good"
+                  : publication
+                    ? "border-warn text-warn"
+                    : "border-border text-muted"
+              }`}
+            >
+              <span>
+                {publication ? (
+                  <>
+                    <span className="font-medium">
+                      {publication.state === "official" ? dict.publication.official : dict.publication.provisional}
+                    </span>{" "}
+                    · {t(dict.publication.version, { n: publication.version })} ·{" "}
+                    {t(dict.publication.publishedAt, { time: formatClock(publication.published_at) })}
+                    {publication.protest_deadline_at &&
+                      ` · ${t(dict.publication.deadline, { time: formatClock(publication.protest_deadline_at) })}`}
+                  </>
+                ) : (
+                  dict.publication.live
+                )}
+              </span>
+              {publication && (
+                <a href={`/api/pdf/publication/${publication.id}?lang=${lang}`} target="_blank" rel="noreferrer" className="underline">
+                  {dict.publication.pdf}
+                </a>
+              )}
+            </div>
             <LiveResults
               key={selectedStage ? selectedStage.id : "round"}
               lang={lang}
@@ -141,6 +187,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
               classes={classes}
               entries={entries}
             />
+            </>
           )
         )}
       </main>

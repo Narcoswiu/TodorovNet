@@ -187,6 +187,30 @@ begin
   select * into got from public.team_season_standings where season_id = v_season and club_id = v_club;
   assert got.team_points = 90 and got.rounds_scored = 3, 'team season: plain sum 90, got ' || got.team_points;
 
+  -- ── Publication: numbered versions with a frozen copy of the classification ──
+  declare
+    v_pub bigint;
+  begin
+    v_pub := public.publish_results(v_event, v_nav, 'provisional', 120, 'след GPS проверка');
+    assert (select version from public.publications where id = v_pub) = 1, 'first publication is version 1';
+    assert (select snapshot ->> 'kind' from public.publications where id = v_pub) = 'navigation', 'navigation snapshot';
+    assert (select jsonb_array_length(snapshot -> 'rows') from public.publications where id = v_pub)
+         = (select count(*) from public.navigation_results where stage_id = v_nav), 'snapshot holds every rider';
+    assert (select snapshot -> 'rows' -> 0 ->> 'last_name' from public.publications where id = v_pub) is not null, 'snapshot carries names';
+    assert (select protest_deadline_at between now() + interval '119 minutes' and now() + interval '121 minutes'
+            from public.publications where id = v_pub), 'protest window of 2 h (navigation)';
+
+    v_pub := public.publish_results(v_event, v_nav, 'official');
+    assert (select version from public.publications where id = v_pub) = 2, 'second publication of the stage is version 2';
+
+    v_pub := public.publish_results(v_event, null, 'provisional', 30);
+    assert (select version || '/' || (snapshot ->> 'kind') from public.publications where id = v_pub) = '1/round',
+      'round final is versioned separately';
+
+    v_pub := public.publish_results(v_event, v_ex, 'provisional', 30);
+    assert (select jsonb_array_length(snapshot -> 'sessions') > 0 from public.publications where id = v_pub), 'enduro-cross snapshot has heats';
+  end;
+
   -- ── Neutralised time: 10 minutes of first aid deducted from rider 1 ──
   insert into public.time_adjustments (event_id, stage_id, entry_id, seconds, reason)
   values (v_event, v_nav, e1, -600, 'first aid');

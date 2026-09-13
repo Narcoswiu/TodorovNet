@@ -848,8 +848,11 @@ export type Database = {
           protest_deadline_at: string | null
           published_at: string
           published_by: string | null
+          published_by_name: string | null
+          snapshot: Json | null
           stage_id: number | null
           state: Database["public"]["Enums"]["publication_state"]
+          version: number
         }
         Insert: {
           event_id: number
@@ -858,8 +861,11 @@ export type Database = {
           protest_deadline_at?: string | null
           published_at?: string
           published_by?: string | null
+          published_by_name?: string | null
+          snapshot?: Json | null
           stage_id?: number | null
           state: Database["public"]["Enums"]["publication_state"]
+          version?: number
         }
         Update: {
           event_id?: number
@@ -868,8 +874,11 @@ export type Database = {
           protest_deadline_at?: string | null
           published_at?: string
           published_by?: string | null
+          published_by_name?: string | null
+          snapshot?: Json | null
           stage_id?: number | null
           state?: Database["public"]["Enums"]["publication_state"]
+          version?: number
         }
         Relationships: [
           {
@@ -1804,6 +1813,16 @@ export type Database = {
       is_any_organizer: { Args: never; Returns: boolean }
       is_event_staff: { Args: { p_event_id: number }; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
+      publish_results: {
+        Args: {
+          p_event_id: number
+          p_note?: string
+          p_protest_minutes?: number
+          p_stage_id: number
+          p_state: Database["public"]["Enums"]["publication_state"]
+        }
+        Returns: number
+      }
       server_time: { Args: never; Returns: string }
     }
     Enums: {

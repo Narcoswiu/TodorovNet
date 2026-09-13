@@ -55,6 +55,8 @@ export const ADMIN_TABS = {
   entries: ["organizer", "jury", "jury_chair"],
   stages: ["organizer"],
   timing: ["organizer", "timekeeper", "jury", "jury_chair"],
+  results: ["organizer", "timekeeper", "jury", "jury_chair"],
+  protests: ["organizer", "jury", "jury_chair"],
   staff: ["organizer", "jury_chair"],
   penalties: ["organizer", "gps_judge", "jury", "jury_chair"],
 } satisfies Record<string, StaffRole[]>;
