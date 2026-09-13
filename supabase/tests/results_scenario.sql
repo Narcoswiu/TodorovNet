@@ -62,7 +62,10 @@ declare
   got record;
   failed boolean;
 begin
-  insert into public.clubs (name) values ('Test MC') returning id into v_club;
+  -- The club may already exist from a browser-test import in the same local database.
+  insert into public.clubs (name) values ('Scenario MC')
+  on conflict (name) do update set name = excluded.name
+  returning id into v_club;
   insert into public.riders (first_name, last_name, club_id) values ('Rider', 'One', v_club)   returning id into r1;
   insert into public.riders (first_name, last_name, club_id) values ('Rider', 'Two', v_club)   returning id into r2;
   insert into public.riders (first_name, last_name, club_id) values ('Rider', 'Three', v_club) returning id into r3;
