@@ -11,7 +11,8 @@
     "db:test": "psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -q -f supabase/tests/results_scenario.sql",
     "db:types": "supabase gen types typescript --local > src/lib/database.types.ts",
     "e2e": "node --env-file=.env.local supabase/tests/e2e-timing.cjs",
-    "test:browser": "node tests/browser/admin-and-timing.cjs"
+    "test:browser": "node tests/browser/admin-and-timing.cjs",
+    "test:unit": "node --experimental-strip-types --no-warnings --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.9.0",
