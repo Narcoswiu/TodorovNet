@@ -83,12 +83,14 @@ async function clickButton(page, text, within) {
   );
 }
 
-async function login(context, email, next) {
+async function login(context, email, next, expect) {
   const page = await context.newPage();
   await page.setViewport({ width: 1100, height: 900 });
-  await page.goto(`${APP}/bg/login?next=${encodeURIComponent(next)}`, { waitUntil: "networkidle2" });
+  // Without `next` the login page picks the landing page by role; `expect` is where it should go.
+  const query = next ? `?next=${encodeURIComponent(next)}` : "";
+  await page.goto(`${APP}/bg/login${query}`, { waitUntil: "networkidle2" });
   await submitForm(page, "Вход", { email, password: "demo-todorovnet" });
-  await waitPath(page, `location.pathname === ${JSON.stringify(next)}`);
+  await waitPath(page, `location.pathname === ${JSON.stringify(next ?? expect)}`);
   return page;
 }
 
@@ -113,8 +115,8 @@ function cp1251(text) {
   // ───────────── Administrator ─────────────
   const adminContext = await browser.createBrowserContext();
   let admin;
-  await step("admin signs in through the login form", async () => {
-    admin = await login(adminContext, "admin@demo.local", "/bg/admin");
+  await step("admin signs in through the login form and lands in the admin panel", async () => {
+    admin = await login(adminContext, "admin@demo.local", null, "/bg/admin");
   });
 
   let eventId;

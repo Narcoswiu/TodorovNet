@@ -11,14 +11,14 @@ export default async function LoginPage({ params, searchParams }: PageProps<"/[l
 
   const { next } = await searchParams;
   // Only allow redirects back into this site.
-  const redirectTo = typeof next === "string" && next.startsWith(`/${lang}/`) ? next : `/${lang}/t`;
+  const redirectTo = typeof next === "string" && next.startsWith(`/${lang}/`) ? next : null;
 
   return (
     <>
       <SiteHeader lang={lang} dict={dict} />
       <main className="mx-auto w-full max-w-sm flex-1 px-4 py-10">
         <h1 className="mb-6 text-xl font-semibold tracking-tight">{dict.login.heading}</h1>
-        <LoginForm dict={dict} redirectTo={redirectTo} />
+        <LoginForm lang={lang} dict={dict} redirectTo={redirectTo} />
       </main>
     </>
   );
