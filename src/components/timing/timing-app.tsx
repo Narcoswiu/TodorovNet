@@ -67,6 +67,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   const [flash, setFlash] = useState<{ text: string; tone: "good" | "bad"; key: number } | null>(null);
   const [now, setNow] = useState<Date | null>(null);
   const [sun, setSun] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const audio = useRef<AudioContext | null>(null);
   const keyHandler = useRef<(event: KeyboardEvent) => void>(() => undefined);
 
@@ -205,14 +206,24 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       // Offline, skip the network entirely and use what was saved on the phone.
       const response = navigator.onLine
         ? await withTimeout(
-            supabase
-              .from("event_staff")
-              .select("role, events(id, name, location, date_from, status)")
-              .eq("user_id", userId),
+            Promise.all([
+              supabase.from("event_staff").select("role, events(id, name, location, date_from, status)").eq("user_id", userId),
+              supabase.from("profiles").select("is_super_admin").eq("id", userId).maybeSingle(),
+            ]),
             READ_TIMEOUT_MS,
           )
         : null;
-      const rows = response && !response.error ? response.data : null;
+      let rows = response && !response[0].error ? response[0].data : null;
+      const superAdmin = !!response?.[1].data?.is_super_admin;
+      if (response) setIsAdmin(superAdmin);
+      // Super admins may time any event (the database allows it), so they don't have to add themselves as staff.
+      if (rows && superAdmin) {
+        const { data: all } = await supabase
+          .from("events")
+          .select("id, name, location, date_from, status")
+          .neq("status", "finished");
+        rows = [...rows, ...(all ?? []).map((event) => ({ role: "organizer" as const, events: event }))];
+      }
 
       let list: StaffEvent[];
       if (!rows) {
@@ -222,7 +233,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         for (const row of rows) {
           if (!row.events || row.events.status === "finished") continue;
           const current = byEvent.get(row.events.id) ?? { ...row.events, roles: [] };
-          current.roles.push(row.role);
+          if (!current.roles.includes(row.role)) current.roles.push(row.role);
           byEvent.set(row.events.id, current);
         }
         list = [...byEvent.values()].sort((a, b) => a.date_from.localeCompare(b.date_from));
@@ -529,7 +540,20 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       <div>
         <h1 className="mb-4 text-2xl font-bold">{dict.timing.chooseEvent}</h1>
         {events === null && <p className="text-muted">{dict.common.loading}</p>}
-        {events?.length === 0 && <p className="text-muted">{dict.timing.noEvents}</p>}
+        {events?.length === 0 && (
+          <div className="space-y-4 rounded-2xl border-2 border-dashed border-border p-5">
+            <p className="text-lg font-semibold">{dict.timing.noEvents}</p>
+            <p className="text-muted">{isAdmin ? dict.timing.noEventsAdmin : dict.timing.noEventsStaff}</p>
+            {isAdmin && (
+              <Link
+                href={`/${lang}/admin/events/new`}
+                className="block rounded-2xl bg-accent px-5 py-4 text-center text-lg font-bold text-accent-foreground"
+              >
+                {dict.timing.createEvent}
+              </Link>
+            )}
+          </div>
+        )}
         <ul className="space-y-3">
           {events?.map((event) => (
             <li key={event.id}>
