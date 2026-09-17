@@ -577,72 +577,23 @@ export const en: Dictionary = {
     submit: "Sign in",
     invalid: "Wrong email or password.",
   },
+  author: {
+    kicker: "Creator of the system",
+    name: "Nikolay Todorov",
+    role: "Developer of TodorovNET · co-founder of Wavsy",
+    titles: ["Software Engineer", "AI Engineer", "BG-X GPS judge"],
+    photoAlt: "Nikolay Todorov, creator of TodorovNET",
+    story:
+      "I built TodorovNET because I am on the course as a GPS judge and see up close how much it matters that results are accurate and out straight away – not hours after the finish.",
+    mission:
+      "The goal is simple: every rider, team and fan follows the standings live, officials work calmly even without coverage, and official results are transparent and beautiful.",
+    contact: "Get in touch",
+    email: "nikolai.todorov.dev@gmail.com",
+    builtBy: "Built by Nikolay Todorov",
+  },
   footer: {
     guide: "Officials' guide",
     privacy: "Privacy and personal data",
-  },
-  guide: {
-    title: "Guide for officials and timekeepers",
-    intro:
-      "What each role does before and during the event. Names in quotes are the exact labels of buttons and tabs. Roles are given by the organizer in the “Staff” tab.",
-    openTiming: "Open timing",
-    roles: [
-      {
-        id: "organizer",
-        heading: "Organizer (before the event)",
-        steps: [
-          "Admin → “New event”. Choose the kind, season and round, and how the overall ranking works: “By points (BG-X)” or “By total time”. While the status is “Draft (hidden)”, the public cannot see the event.",
-          "“Classes”: choose the classes that will race.",
-          "“Entries”: add riders by hand or with “Import from Excel or CSV”. Review the entries flagged for checking (age, licence, club, registered number).",
-          "“Stages” → “New stage”. For a navigation stage set the first start, interval, riders per slot and course close, plus per-class settings if needed. Add the checkpoints and press “Generate the start list”. The list locks after the first recorded time.",
-          "For enduro-cross: “Create qualifying and 2 heats for every class”, then “Qualifying groups A/B” (more than 20 riders) and “Finals grid”.",
-          "“Staff”: add timekeepers, GPS judges and the jury by email. Each person needs an account first.",
-        ],
-      },
-      {
-        id: "timekeeper",
-        heading: "Timekeeper (phone)",
-        steps: [
-          "Open “Timing” and sign in. Do this at least once with internet before the event: after that the app opens without coverage too.",
-          "Choose the stage and the point (“Start”, “Finish” or a checkpoint). In enduro-cross choose the session and press “Start” when the heat begins.",
-          "Type the number and press “Record”. The time is the moment you press, matched to the server clock. With ⏱ you can fix the time before you finish typing the number.",
-          "Without a connection the record stays on the phone marked “Waiting for connection” and is sent by itself when there is signal. Closing the app does not lose records.",
-          "Time from a paper sheet: open “Manual time”, enter the time and the number, and press “Record”.",
-          "Wrong record: “Void” → “Confirm void”. A connection is needed. “Rejected” means this number already has a record at this point, or the number does not exist.",
-          "Enduro-cross: in danger press “Red flag”. The jury decides whether the heat is counted up to the flag or restarted.",
-          "Incident: “SOS / Message”. If you type the number first, it is sent together with your location. The organizer and the jury receive it at once.",
-        ],
-      },
-      {
-        id: "gps",
-        heading: "GPS judge",
-        steps: [
-          "“GPS check”: choose the stage, upload the official track (once per stage) and save the mandatory waypoints.",
-          "Enter the number, choose the rider's GPX file and press “Check”. The file is not uploaded anywhere until you propose a penalty.",
-          "Rulebook thresholds: deviation 100–500 m = 30 minutes, 500–1000 m = 2 hours, over 1000 m = disqualification. Under 100 m there is no penalty. The check also shows signal gaps and missed waypoints.",
-          "“Propose penalty” attaches the map of the spot and a section of the track as evidence. The penalty applies only after the jury confirms it.",
-        ],
-      },
-      {
-        id: "jury",
-        heading: "Jury and jury chair",
-        steps: [
-          "“Penalties”: confirm or reject proposed penalties and set statuses (DNF, DSQ).",
-          "“Times”: add a time by hand, void one with a reason, or add neutralised time for one rider or a whole class.",
-          "“Protests”: record the protest (80 € fee); the system shows the deadline. Decide with “Uphold” or “Reject” and write the reasons.",
-          "“Publishing”: “Publish provisional” with a protest period. When the period is over and protests are decided, the chair presses “Declare official”. Every version is frozen and has a PDF.",
-          "“Messages”: SOS calls arrive here. Open the map, send help and press “Resolved”.",
-        ],
-      },
-    ],
-    checklistHeading: "Before the start",
-    checklist: [
-      "Charged phones and a power bank for every timekeeper.",
-      "Everyone has signed in and opened “Timing” with internet.",
-      "The clock in the app shows a small offset (±ms).",
-      "The start list is generated and published.",
-      "The official track is uploaded in “GPS check”.",
-    ],
   },
   privacy: {
     title: "Privacy and personal data",
