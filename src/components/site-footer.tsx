@@ -18,8 +18,8 @@ export function SiteFooter({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           <Link href={`/${lang}/archive`} className="hover:text-foreground">
             {dict.nav.archive}
           </Link>
-          <Link href={`/${lang}/guide`} className="hover:text-foreground">
-            {dict.footer.guide}
+          <Link href={`/${lang}/staff`} className="hover:text-foreground">
+            {dict.nav.staff}
           </Link>
           <Link href={`/${lang}/privacy`} className="hover:text-foreground">
             {dict.footer.privacy}

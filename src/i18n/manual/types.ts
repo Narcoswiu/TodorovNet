@@ -34,4 +34,6 @@ export type Manual = {
   tipLabel: string;
   warningLabel: string;
   back: string;
+  download: string;
+  staffOnly: string;
 };

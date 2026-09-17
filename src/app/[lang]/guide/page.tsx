@@ -5,6 +5,7 @@ import { AuthorCard } from "@/components/brand/author-card";
 import { SiteHeader } from "@/components/site-header";
 import { hasLocale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
+import { getViewer } from "@/lib/auth";
 import { manualBg } from "@/i18n/manual/bg";
 import { manualEn } from "@/i18n/manual/en";
 import type { ManualSection } from "@/i18n/manual/types";
@@ -21,6 +22,26 @@ export default async function GuidePage({ params }: PageProps<"/[lang]/guide">) 
   if (!hasLocale(lang)) notFound();
   const dict = getDictionary(lang);
   const m = lang === "en" ? manualEn : manualBg;
+
+  // The manual is for officials, not for riders: it is reachable only with an account.
+  const viewer = await getViewer();
+  if (!viewer) {
+    return (
+      <>
+        <SiteHeader lang={lang} dict={dict} />
+        <main className="mx-auto w-full max-w-lg flex-1 px-4 py-20 text-center">
+          <h1 className="font-display text-3xl font-bold uppercase tracking-wide">{m.title}</h1>
+          <p className="mt-4 text-muted">{m.staffOnly}</p>
+          <Link
+            href={`/${lang}/login?next=/${lang}/guide`}
+            className="mt-8 inline-block rounded-full bg-accent px-6 py-3 font-semibold text-accent-foreground"
+          >
+            {dict.common.signIn}
+          </Link>
+        </main>
+      </>
+    );
+  }
   const toc = [
     ...m.chapters.map((chapter, index) => ({ id: chapter.id, label: chapter.title, number: `${index + 1}` })),
     { id: "roles", label: m.roles.title, number: "✓" },
@@ -49,13 +70,19 @@ export default async function GuidePage({ params }: PageProps<"/[lang]/guide">) 
               </a>
             ))}
           </div>
-          <Link
-            href={`/${lang}/t`}
-            className="rise mt-6 inline-block rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground"
-            style={{ "--d": "260ms" } as React.CSSProperties}
-          >
-            ⏱ {dict.nav.timing}
-          </Link>
+          <div className="rise mt-6 flex flex-wrap gap-3" style={{ "--d": "260ms" } as React.CSSProperties}>
+            <Link href={`/${lang}/t`} className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground">
+              ⏱ {dict.nav.timing}
+            </Link>
+            <a
+              href={`/api/pdf/manual?lang=${lang}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-border bg-card px-5 py-2.5 text-sm font-semibold hover:border-accent"
+            >
+              {m.download} · PDF
+            </a>
+          </div>
         </header>
 
         <div className="mt-10 grid gap-10 lg:grid-cols-[15rem_1fr]">

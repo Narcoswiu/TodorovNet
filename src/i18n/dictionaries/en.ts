@@ -23,6 +23,7 @@ export const en: Dictionary = {
     events: "Events",
     timing: "Timing",
     archive: "Archive",
+    staff: "For officials",
   },
   home: {
     heading: "Events",
@@ -590,6 +591,18 @@ export const en: Dictionary = {
     contact: "Get in touch",
     email: "nikolai.todorov.dev@gmail.com",
     builtBy: "Built by Nikolay Todorov",
+  },
+  staffHub: {
+    kicker: "Staff only",
+    title: "For officials and organizers",
+    intro: "From here you reach the admin panel, the timing app and the manual. If you have an account, sign in – everything else is one tap away.",
+    noAccount: "No account? The event organizer or the administrator creates one.",
+    adminTitle: "Admin panel",
+    adminText: "Events, entries, stages, penalties, protests and publishing.",
+    timingTitle: "Timing",
+    timingText: "Record times from a phone; works without coverage.",
+    manualText: "How to use the system, step by step, plus a printable PDF.",
+    open: "Open",
   },
   footer: {
     guide: "Officials' guide",

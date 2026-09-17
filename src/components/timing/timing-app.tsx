@@ -651,8 +651,11 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
             </li>
           ))}
         </ul>
-        <div className="mt-8">
+        <div className="mt-8 space-y-4">
           <InstallApp dict={dict} />
+          <Link href={`/${lang}/guide`} className="block text-center text-sm text-muted underline">
+            {dict.footer.guide}
+          </Link>
         </div>
       </div>,
     );

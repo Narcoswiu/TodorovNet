@@ -347,4 +347,6 @@ export const manualEn: Manual = {
   tipLabel: "Tip",
   warningLabel: "Important",
   back: "Back to top",
+  download: "Download the manual",
+  staffOnly: "The manual is for officials, timekeepers and organizers. Sign in with your account to open it.",
 };

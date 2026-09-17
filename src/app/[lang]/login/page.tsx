@@ -12,6 +12,7 @@ export default async function LoginPage({ params, searchParams }: PageProps<"/[l
   const { next } = await searchParams;
   // Only allow redirects back into this site.
   const redirectTo = typeof next === "string" && next.startsWith(`/${lang}/`) ? next : null;
+  // Without an explicit target the login form asks the database what this account may do.
 
   return (
     <>
