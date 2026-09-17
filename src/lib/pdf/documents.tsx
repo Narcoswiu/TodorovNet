@@ -1,4 +1,5 @@
 import path from "node:path";
+import { cloneElement, isValidElement } from "react";
 import { Circle, Document, Font, Page, Path, Rect, StyleSheet, Svg, Text, View } from "@react-pdf/renderer";
 import type { Style } from "@react-pdf/stylesheet";
 import { t, type Locale } from "@/i18n/config";
@@ -156,11 +157,12 @@ function Cell({ children, align }: { children: React.ReactNode; align?: "right" 
   return <View style={{ alignItems: align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start" }}>{children}</View>;
 }
 
-function Table<Row extends { entry_id: number }>({ columns, rows }: { columns: Column<Row>[]; rows: Row[] }) {
+function Table<Row extends { entry_id: number }>({ columns, rows, lead }: { columns: Column<Row>[]; rows: Row[]; lead?: React.ReactNode }) {
   const box = (column: Column<Row>) => (column.width ? [styles.cell, { width: column.width }] : styles.riderCell);
   return (
     <View>
-      <View style={styles.headRow} fixed>
+      {lead}
+      <View style={styles.headRow} minPresenceAhead={60} wrap={false}>
         {columns.map((column) => (
           <View key={column.label} style={box(column)}>
             <Text style={[styles.headText, column.align ? { textAlign: column.align } : {}]}>{column.label}</Text>
@@ -349,28 +351,35 @@ function ClassSections<Row extends { class_id: number }>({
   sort: (a: Row, b: Row) => number;
   table: (rows: Row[], cls: SnapshotClass) => React.ReactNode;
 }) {
+  const table_ = table;
   return (
     <>
       {classes.map((cls) => {
         const classRows = rows.filter((row) => row.class_id === cls.id).sort(sort);
         if (!classRows.length) return null;
         const plate = plateFor(cls.code);
-        return (
-          <View key={cls.id} wrap>
-            <View style={styles.classBar} minPresenceAhead={60} wrap={false}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={[styles.swatch, { backgroundColor: plate.bg }]} />
-                <Text style={styles.className}>{localizedName(cls, lang)}</Text>
-              </View>
-              <Text style={styles.classCount}>{t(dict.pdf.riders, { n: classRows.length })}</Text>
+        const bar = (
+          <View style={styles.classBar}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={[styles.swatch, { backgroundColor: plate.bg }]} />
+              <Text style={styles.className}>{localizedName(cls, lang)}</Text>
             </View>
-            {table(classRows, cls)}
+            <Text style={styles.classCount}>{t(dict.pdf.riders, { n: classRows.length })}</Text>
+          </View>
+        );
+        const table = table_(classRows, cls);
+        return (
+          // A class that fits on a page is kept whole, so its heading never ends up alone at the bottom.
+          <View key={cls.id} wrap={classRows.length > KEEP_WHOLE}>
+            {isValidElement<{ lead?: React.ReactNode }>(table) ? cloneElement(table, { lead: bar }) : table}
           </View>
         );
       })}
     </>
   );
 }
+
+const KEEP_WHOLE = 18;
 
 const STATUS_ORDER = ["classified", "on_course", "nc", "dnf", "dns", "dsq"];
 
