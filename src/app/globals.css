@@ -48,3 +48,29 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+/* Timing app in direct sunlight: pure black on white, heavy borders, deeper colours. */
+.timing-sun {
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --muted: #1f2937;
+  --border: #000000;
+  --accent: #c2410c;
+  --accent-foreground: #ffffff;
+  --good: #15803d;
+  --warn: #a16207;
+  --bad: #b91c1c;
+  color-scheme: light;
+}
+
+@keyframes timing-flash-in {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+}
+
+.timing-flash {
+  animation: timing-flash-in 160ms ease-out;
+}
