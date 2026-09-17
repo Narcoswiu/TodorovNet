@@ -144,7 +144,10 @@ export const en: Dictionary = {
   timing: {
     heading: "Timing",
     chooseEvent: "Choose an event",
-    noEvents: "You have no role in a current event.",
+    noEvents: "No current events for you.",
+    noEventsAdmin: "Create an event in the admin panel and it will appear here. You don’t need to add yourself to “Staff”.",
+    noEventsStaff: "Ask the organizer to add you as a timekeeper in the “Staff” tab.",
+    createEvent: "Create an event",
     stage: "Stage",
     point: "Point",
     start: "Start",
