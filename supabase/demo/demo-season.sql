@@ -152,8 +152,10 @@ begin
         -- Two riders per event don't finish; they stop after CP2.
         v_n := case when s.race_number % 100 in (7) and s.class_code in ('pro', 'std') then 2 else 4 end;
         for k in 1 .. v_n loop
+          -- The race number adds a few seconds, so no two riders share a time (a real tie is rare).
           v_at := s.scheduled_start
-                  + make_interval(secs => round(k * (case s.class_code when 'wom' then 2700 when 'std' then 3000 else 3300 end) * v_skill));
+                  + make_interval(secs => round(k * (case s.class_code when 'wom' then 2700 when 'std' then 3000 else 3300 end) * v_skill)
+                                          + k * (s.race_number % 100) * 7);
           continue when v_at > now();
           if k <= 3 then
             insert into public.passings (client_id, event_id, stage_id, entry_id, point, checkpoint_id, passed_at, recorded_by, source)

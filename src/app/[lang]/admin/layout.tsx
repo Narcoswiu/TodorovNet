@@ -20,6 +20,9 @@ export default async function AdminLayout({ children, params }: LayoutProps<"/[l
           <Link href={`/${lang}/admin`} className="font-medium text-foreground">
             {dict.admin.heading}
           </Link>
+          <Link href={`/${lang}/guide`} className="underline hover:text-foreground">
+            {dict.footer.guide}
+          </Link>
           <form action={signOut} className="flex items-center gap-3">
             <span>{t(dict.admin.signedInAs, { email: viewer.email })}</span>
             <input type="hidden" name="lang" value={lang} />

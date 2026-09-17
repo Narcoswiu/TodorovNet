@@ -12,14 +12,14 @@ export function SiteFooter({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           <span className="font-display font-bold uppercase tracking-wide text-foreground">
             Todorov<span className="text-accent">NET</span>
           </span>
-          <span className="hidden sm:inline">· {dict.meta.description}</span>
+          <span className="hidden sm:inline">· {dict.author.builtBy}</span>
         </span>
         <span className="flex flex-wrap gap-5">
           <Link href={`/${lang}/archive`} className="hover:text-foreground">
             {dict.nav.archive}
           </Link>
-          <Link href={`/${lang}/guide`} className="hover:text-foreground">
-            {dict.footer.guide}
+          <Link href={`/${lang}/staff`} className="hover:text-foreground">
+            {dict.nav.staff}
           </Link>
           <Link href={`/${lang}/privacy`} className="hover:text-foreground">
             {dict.footer.privacy}

@@ -94,6 +94,7 @@ export function EventCoverEditor({ eventId, imageUrl, dict }: { eventId: number;
             value={url}
             onChange={(event) => setUrl(event.target.value)}
             placeholder={text.url}
+            aria-label={text.url}
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent"
           />
           <button type="submit" className="rounded-md border border-border px-3 py-2 font-semibold hover:border-accent">

@@ -4,7 +4,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/t",
-    name: "TodorovNET Хронометраж",
+    name: "TodorovNET · Хронометраж / Timing",
     short_name: "TodorovNET",
     description: "Хронометраж на трасето, работи и без покритие · Course timing that works without coverage",
     start_url: "/t",

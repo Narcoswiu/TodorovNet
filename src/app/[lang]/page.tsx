@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EventCover } from "@/components/brand/event-cover";
 import { EventTile, type EventCard } from "@/components/brand/event-tile";
+import { AuthorCard } from "@/components/brand/author-card";
 import { StatusBadge } from "@/components/brand/status-badge";
 import { SiteHeader } from "@/components/site-header";
 import { hasLocale, t } from "@/i18n/config";
@@ -150,6 +151,9 @@ export default async function HomePage({ params }: PageProps<"/[lang]">) {
               </div>
             </section>
           )}
+          <div className="mt-16">
+            <AuthorCard dict={dict} />
+          </div>
         </div>
       </main>
     </>

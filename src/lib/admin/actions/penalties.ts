@@ -17,6 +17,17 @@ async function entryByNumber(viewer: Viewer, eventId: number, raceNumber: number
   return data?.id ?? null;
 }
 
+/** "12" for a whole stage, or "12:34" for heat 34 of enduro-cross stage 12. */
+function stageAndSession(formData: FormData): { stageId: number | null; sessionId: number | null } {
+  const [stage, session] = String(formData.get("stage_id") ?? "").split(":");
+  const stageId = Number(stage);
+  const sessionId = session ? Number(session) : null;
+  return {
+    stageId: Number.isInteger(stageId) && stageId > 0 ? stageId : null,
+    sessionId: sessionId != null && Number.isInteger(sessionId) && sessionId > 0 ? sessionId : null,
+  };
+}
+
 function juryError(error: { code?: string; message: string }, dict: Dictionary) {
   return error.message.includes("Only the jury") ? dict.admin.errors.forbidden : explainDbError(error, dict);
 }
@@ -25,7 +36,7 @@ export async function proposePenalty(_previous: ActionResult, formData: FormData
   const { dict } = formContext(formData);
   const viewer = await getViewer();
   const eventId = intField(formData, "event_id");
-  const stageId = intField(formData, "stage_id");
+  const { stageId, sessionId } = stageAndSession(formData);
   const raceNumber = intField(formData, "race_number");
   const typeId = intField(formData, "penalty_type_id");
   const units = numberField(formData, "units") ?? 1;
@@ -37,9 +48,21 @@ export async function proposePenalty(_previous: ActionResult, formData: FormData
   const entryId = await entryByNumber(viewer, eventId, raceNumber);
   if (!entryId) return { ok: false, error: t(dict.admin.penalties.unknownNumber, { n: raceNumber }) };
 
+  // An enduro-cross time penalty is added to one heat; without a heat it would count nowhere.
+  if (!sessionId) {
+    const [{ data: stage }, { data: type }] = await Promise.all([
+      viewer.supabase.from("stages").select("type").eq("id", stageId).maybeSingle(),
+      viewer.supabase.from("penalty_types").select("kind").eq("id", typeId).maybeSingle(),
+    ]);
+    if (stage?.type === "enduro_cross" && type && type.kind !== "dsq") {
+      return { ok: false, error: dict.admin.penalties.chooseHeat };
+    }
+  }
+
   const { error } = await viewer.supabase.from("penalties").insert({
     event_id: eventId,
     stage_id: stageId,
+    session_id: sessionId,
     entry_id: entryId,
     penalty_type_id: typeId,
     units,
@@ -90,7 +113,7 @@ export async function setRiderStatus(_previous: ActionResult, formData: FormData
   const { dict } = formContext(formData);
   const viewer = await getViewer();
   const eventId = intField(formData, "event_id");
-  const stageId = intField(formData, "stage_id");
+  const { stageId, sessionId } = stageAndSession(formData);
   const raceNumber = intField(formData, "race_number");
   const status = textField(formData, "status");
   if (!viewer) return { ok: false, error: dict.admin.errors.forbidden };
@@ -106,7 +129,7 @@ export async function setRiderStatus(_previous: ActionResult, formData: FormData
         {
           event_id: eventId,
           stage_id: stageId,
-          session_id: null,
+          session_id: sessionId,
           entry_id: entryId,
           status: status as "dns" | "dnf" | "dsq" | "nc",
           reason: textField(formData, "reason") || null,
@@ -118,7 +141,7 @@ export async function setRiderStatus(_previous: ActionResult, formData: FormData
         .delete()
         .eq("stage_id", stageId)
         .eq("entry_id", entryId)
-        .is("session_id", null);
+        .filter("session_id", sessionId ? "eq" : "is", sessionId ?? null);
   if (error) return { ok: false, error: explainDbError(error, dict) };
 
   refresh();

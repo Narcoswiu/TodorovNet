@@ -168,7 +168,7 @@ export default async function EventTimingPage({ params, searchParams }: PageProp
         </nav>
         {!passings?.length && <p className="text-sm text-muted">{text.none}</p>}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[40rem] text-sm">
             <tbody>
               {(passings ?? []).map((row) => (
                 <tr key={row.id} className={`border-t border-border align-top ${row.voided_at ? "text-muted" : ""}`}>

@@ -1,4 +1,5 @@
 import { Font, renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
+import { PDF_FONT_FAMILIES } from "./documents";
 import type { ReactElement } from "react";
 
 // react-pdf keeps the opened font between documents in the same server process. Noto Sans draws the
@@ -20,7 +21,7 @@ let queue: Promise<unknown> = Promise.resolve();
 
 export function renderPdf(document: ReactElement<DocumentProps>): Promise<Buffer> {
   const run = queue.then(() => {
-    reopenFonts("Noto Sans");
+    PDF_FONT_FAMILIES.forEach(reopenFonts);
     return renderToBuffer(document);
   });
   queue = run.catch(() => undefined);

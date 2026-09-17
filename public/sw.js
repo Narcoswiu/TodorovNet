@@ -1,6 +1,6 @@
 // Service worker for the timing app. A marshal can reload the app while offline and keep recording:
 // the recorded times themselves live in IndexedDB, this only keeps the app shell available.
-const SHELL_CACHE = "todorovnet-shell-v2";
+const SHELL_CACHE = "todorovnet-shell-v3";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -67,24 +67,25 @@ self.addEventListener("fetch", (event) => {
   // fall back to the last copy when offline.
   const isTimingPage = /^\/((bg|en)\/)?t(\/|$)/.test(url.pathname);
   if (request.mode === "navigate" && isTimingPage) {
+    const cached = async () => {
+      const cache = await caches.open(SHELL_CACHE);
+      return (await cache.match(url.pathname)) ?? (await cache.match("/bg/t")) ?? (await cache.match("/en/t"));
+    };
+    const network = fetch(request).then((response) => {
+      if (response.ok) {
+        const copy = response.clone();
+        caches.open(SHELL_CACHE).then((cache) => cache.put(url.pathname, copy));
+      }
+      return response;
+    });
+    // One bar of signal can keep a request open for a minute. After 3 s the saved app opens instead,
+    // while the network copy still refreshes the cache in the background.
+    const slow = new Promise((resolve) => setTimeout(resolve, 3000)).then(cached);
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(SHELL_CACHE).then((cache) => cache.put(url.pathname, copy));
-          }
-          return response;
-        })
-        .catch(async () => {
-          const cache = await caches.open(SHELL_CACHE);
-          return (
-            (await cache.match(url.pathname)) ??
-            (await cache.match("/bg/t")) ??
-            (await cache.match("/en/t")) ??
-            Response.error()
-          );
-        }),
+      Promise.race([network.catch(() => null), slow.then((response) => response ?? network)])
+        .catch(() => null)
+        .then((response) => response ?? cached())
+        .then((response) => response ?? Response.error()),
     );
   }
 });

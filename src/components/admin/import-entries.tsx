@@ -67,6 +67,7 @@ export function ImportEntries({
       <input
         type="file"
         accept=".xlsx,.csv,.txt"
+        aria-label={text.import}
         onChange={onFile}
         className="block text-sm file:mr-3 file:rounded-md file:border file:border-border file:bg-background file:px-3 file:py-1.5 file:text-sm"
       />

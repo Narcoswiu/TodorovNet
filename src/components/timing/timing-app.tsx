@@ -9,7 +9,7 @@ import { localizedName, riderName, stageName } from "@/i18n/localize";
 import { formatClock } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { correctedNow, measureClockOffset, storedClockOffset } from "@/lib/timing/clock";
-import { enqueue, listItems, loadSnapshot, saveSnapshot, syncQueue, voidOnServer, type QueueItem } from "@/lib/timing/queue";
+import { enqueue, listItems, loadSnapshot, persistStorage, retryRejected, saveSnapshot, syncQueue, voidOnServer, type QueueItem } from "@/lib/timing/queue";
 import { eventLocalToIso, isoToEventLocal } from "@/lib/timezone";
 
 type StaffEvent = { id: number; name: string; location: string; date_from: string; roles: string[] };
@@ -40,6 +40,9 @@ const SYNC_EVERY_MS = 10_000;
 const STATUS_TONE = { synced: "text-good", rejected: "text-bad", pending: "text-warn", voided: "text-muted" } as const;
 const CLOCK_EVERY_MS = 5 * 60_000;
 const SUN_KEY = "todorovnet.timing.sun";
+const SELECTION_KEY = "todorovnet.timing.selection";
+// Event handlers only; kept outside the component so render stays pure.
+const msNow = () => Date.now();
 
 export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   const supabase = useMemo(() => createClient(), []);
@@ -68,6 +71,10 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   const [now, setNow] = useState<Date | null>(null);
   const [sun, setSun] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [signedOut, setSignedOut] = useState(false);
+  const recording = useRef(false);
+  const lastRecord = useRef<{ key: string; at: number } | null>(null);
+  const confirmShownAt = useRef(0);
   const audio = useRef<AudioContext | null>(null);
   const keyHandler = useRef<(event: KeyboardEvent) => void>(() => undefined);
 
@@ -117,6 +124,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       }
     }, 0);
     const timer = setInterval(tick, 1000);
+    persistStorage();
     const onKey = (event: KeyboardEvent) => keyHandler.current(event);
     window.addEventListener("keydown", onKey);
     return () => {
@@ -158,7 +166,9 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       .then(({ data: session }) => {
         const id = session.session?.user.id ?? null;
         if (id) rememberUser(id);
-        setUserId(id ?? (navigator.onLine ? null : cachedUser()));
+        // A phone that shows signal bars but has no data cannot refresh the session: keep working as the
+        // last signed-in timekeeper. Records wait in the queue until a real sign-in succeeds.
+        setUserId(id ?? cachedUser());
       })
       .catch(() => setUserId(cachedUser()));
 
@@ -270,6 +280,41 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
     // Re-runs when the connection comes back, replacing saved data with fresh data.
   }, [supabase, eventId, online]);
 
+  // Stage, point and heat are remembered per event, so a reload on the course keeps the timekeeper's place.
+  useEffect(() => {
+    if (eventId == null) return;
+    const timer = setTimeout(() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(`${SELECTION_KEY}.${eventId}`) ?? "null");
+        if (saved) {
+          setStageId(saved.stageId ?? null);
+          setPoint(saved.point ?? "finish");
+          setSessionId(saved.sessionId ?? null);
+        }
+      } catch {
+        // Nothing saved.
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [eventId]);
+
+  function choose(next: { stageId?: number; point?: string; sessionId?: number | null }) {
+    // A new stage starts at its finish and first heat: an old checkpoint belongs to another stage.
+    const selection = {
+      stageId: next.stageId ?? stageId,
+      point: next.stageId !== undefined && next.stageId !== stageId ? "finish" : (next.point ?? point),
+      sessionId: next.stageId !== undefined && next.stageId !== stageId ? null : next.sessionId !== undefined ? next.sessionId : sessionId,
+    };
+    setStageId(selection.stageId);
+    setPoint(selection.point);
+    setSessionId(selection.sessionId);
+    try {
+      localStorage.setItem(`${SELECTION_KEY}.${eventId}`, JSON.stringify(selection));
+    } catch {
+      // Private mode: the choice lasts until the page closes.
+    }
+  }
+
   // Default to the first stage once data arrives.
   const stage = data?.stages.find((s) => s.id === stageId) ?? data?.stages[0] ?? null;
 
@@ -283,6 +328,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
     }
     const result = await syncQueue(supabase);
     if (result.offline) setOnline(false);
+    setSignedOut(result.signedOut);
     setItems(await listItems(eventId));
   }, [supabase, eventId]);
 
@@ -322,6 +368,8 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   const checkpoints = (data?.checkpoints ?? []).filter((cp) => cp.stage_id === stage?.id);
   const sessions = (data?.sessions ?? []).filter((s) => s.stage_id === stage?.id);
   const session = sessions.find((s) => s.id === sessionId) ?? sessions[0] ?? null;
+  const activePoint = point.startsWith("cp:") && !checkpoints.some((cp) => `cp:${cp.id}` === point) ? "finish" : point;
+  const wrongClass = stage?.type === "enduro_cross" && !!session && !!typedEntry && typedEntry.class_id !== session.class_id;
 
   function sessionLabel(s: EventData["sessions"][number]) {
     const cls = classById.get(s.class_id);
@@ -330,15 +378,34 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   }
 
   function pointLabel(): string {
-    if (point === "start") return dict.timing.start;
-    if (point === "finish") return dict.timing.finish;
-    return checkpoints.find((cp) => `cp:${cp.id}` === point)?.code ?? "";
+    if (activePoint === "start") return dict.timing.start;
+    if (activePoint === "finish") return dict.timing.finish;
+    return checkpoints.find((cp) => `cp:${cp.id}` === activePoint)?.code ?? "";
   }
 
   async function record() {
+    if (recording.current) return; // A double tap or a held Enter records once.
+    recording.current = true;
+    try {
+      await recordOnce();
+    } finally {
+      recording.current = false;
+    }
+  }
+
+  async function recordOnce() {
     if (!stage || eventId == null || typedNumber == null) return;
     if (!typedEntry) {
       setMessage({ text: t(dict.timing.unknownNumber, { n: typedNumber }), tone: "bad" });
+      return;
+    }
+    if (wrongClass) {
+      setMessage({ text: dict.timing.wrongClass, tone: "bad" });
+      return;
+    }
+    const key = `${stage.id}:${stage.type === "enduro_cross" ? session?.id : activePoint}:${typedEntry.id}`;
+    if (lastRecord.current && lastRecord.current.key === key && msNow() - lastRecord.current.at < 2000) {
+      setMessage({ text: dict.timing.justRecorded, tone: "bad" });
       return;
     }
     // A time typed from a paper sheet wins over the stamp and the clock.
@@ -352,10 +419,11 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       }
       at = new Date(iso);
     } else {
-      at = stampedAt ?? correctedNow(offset ?? 0);
+      at = stampedAt ?? correctedNow(offset ?? storedClockOffset());
     }
     const source = manualTime ? "manual" : "device";
 
+    try {
     if (stage.type === "enduro_cross") {
       if (!session) return;
       await enqueue({
@@ -365,7 +433,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         payload: { event_id: eventId, session_id: session.id, entry_id: typedEntry.id, crossed_at: at.toISOString(), source },
       });
     } else {
-      const isCheckpoint = point.startsWith("cp:");
+      const isCheckpoint = activePoint.startsWith("cp:");
       await enqueue({
         table: "passings",
         event_id: eventId,
@@ -374,25 +442,33 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           event_id: eventId,
           stage_id: stage.id,
           entry_id: typedEntry.id,
-          point: isCheckpoint ? "checkpoint" : (point as "start" | "finish"),
-          checkpoint_id: isCheckpoint ? Number(point.slice(3)) : null,
+          point: isCheckpoint ? "checkpoint" : (activePoint as "start" | "finish"),
+          checkpoint_id: isCheckpoint ? Number(activePoint.slice(3)) : null,
           passed_at: at.toISOString(),
           source,
         },
       });
     }
 
+    } catch {
+      // The phone could not store the record (storage full or blocked): say so loudly, keep the number typed.
+      setMessage({ text: dict.timing.saveFailed, tone: "bad" });
+      return;
+    }
+
+    lastRecord.current = { key, at: msNow() };
     setMessage({ text: t(dict.timing.recorded, { n: typedNumber, time: formatClock(at) }), tone: "good" });
     setDigits("");
     setStampedAt(null);
     setManualTime("");
+    setManualDate("");
     setItems(await listItems(eventId));
     sync();
   }
 
   async function redFlag() {
     if (!session || !data) return;
-    const flaggedAt = correctedNow(offset ?? 0).toISOString();
+    const flaggedAt = correctedNow(offset ?? storedClockOffset()).toISOString();
     const { error } = await supabase
       .from("sessions")
       .update({ red_flag_at: flaggedAt, red_flag_decision: null })
@@ -408,7 +484,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   function currentPosition(): Promise<GeolocationPosition | null> {
     if (!("geolocation" in navigator)) return Promise.resolve(null);
     return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { enableHighAccuracy: true, timeout: 5000, maximumAge: 60_000 });
+      navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { enableHighAccuracy: true, timeout: 2500, maximumAge: 120_000 });
     });
   }
 
@@ -416,7 +492,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
     if (eventId == null) return;
     const position = await currentPosition();
     const number = typedNumber != null && typedEntry ? typedNumber : null;
-    const isCheckpoint = point.startsWith("cp:");
+    const isCheckpoint = activePoint.startsWith("cp:");
     await enqueue({
       table: "marshal_messages",
       event_id: eventId,
@@ -424,14 +500,14 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       payload: {
         event_id: eventId,
         stage_id: stage?.id ?? null,
-        checkpoint_id: isCheckpoint && stage?.type === "navigation" ? Number(point.slice(3)) : null,
+        checkpoint_id: isCheckpoint && stage?.type === "navigation" ? Number(activePoint.slice(3)) : null,
         kind,
         race_number: number,
         body: messageText.trim(),
         lat: position?.coords.latitude ?? null,
         lon: position?.coords.longitude ?? null,
         accuracy_m: position?.coords.accuracy ?? null,
-        sent_at: correctedNow(offset ?? 0).toISOString(),
+        sent_at: correctedNow(offset ?? storedClockOffset()).toISOString(),
       },
     });
     setMessage({ text: kind === "sos" ? dict.timing.sosQueued : dict.timing.infoQueued, tone: kind === "sos" ? "bad" : "good" });
@@ -442,6 +518,8 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   }
 
   async function voidItem(item: QueueItem) {
+    // The confirm button appears where "Void" was: a double tap must not confirm by accident.
+    if (msNow() - confirmShownAt.current < 700) return;
     setConfirmVoid(null);
     if (eventId == null) return;
     if (!navigator.onLine) {
@@ -449,13 +527,13 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       return;
     }
     const voided = await voidOnServer(supabase, item, dict.timing.voidReason);
-    if (!voided) setMessage({ text: dict.admin.errors.forbidden, tone: "bad" });
+    if (!voided) setMessage({ text: dict.timing.voidFailed, tone: "bad" });
     setItems(await listItems(eventId));
   }
 
   async function startSession() {
     if (!session || !data) return;
-    const startedAt = correctedNow(offset ?? 0).toISOString();
+    const startedAt = correctedNow(offset ?? storedClockOffset()).toISOString();
     const { error } = await supabase.from("sessions").update({ started_at: startedAt }).eq("id", session.id);
     if (error) {
       setMessage({ text: error.message, tone: "bad" });
@@ -466,7 +544,11 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
 
   function press(key: string) {
     setMessage(null);
-    if (key === "back") setDigits((d) => d.slice(0, -1));
+    if (key === "back") {
+      // A time fixed for one rider must not carry over to the next number.
+      if (digits.length <= 1) setStampedAt(null);
+      setDigits((d) => d.slice(0, -1));
+    }
     else if (key === "clear") {
       setDigits("");
       setStampedAt(null);
@@ -477,6 +559,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   useEffect(() => {
     keyHandler.current = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      if (event.repeat) return;
       if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
       if (/^[0-9]$/.test(event.key)) press(event.key);
       else if (event.key === "Backspace") press("back");
@@ -568,8 +651,11 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
             </li>
           ))}
         </ul>
-        <div className="mt-8">
+        <div className="mt-8 space-y-4">
           <InstallApp dict={dict} />
+          <Link href={`/${lang}/guide`} className="block text-center text-sm text-muted underline">
+            {dict.footer.guide}
+          </Link>
         </div>
       </div>,
     );
@@ -596,6 +682,15 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         {offset != null && <span className="text-xs text-muted">{t(dict.timing.clockOffset, { ms: Math.round(offset) })}</span>}
       </div>
 
+      {signedOut && (
+        <Link
+          href={`/${lang}/login?next=/${lang}/t`}
+          className="mb-3 block rounded-xl border-2 border-bad px-3 py-2 text-sm font-bold text-bad"
+        >
+          {dict.timing.signedOut}
+        </Link>
+      )}
+
       {snapshotTime && (
         <p className="mb-3 rounded-xl border-2 border-warn px-3 py-2 text-sm font-medium text-warn">
           {t(dict.timing.savedOffline, { time: formatClock(new Date(snapshotTime)) })}
@@ -607,7 +702,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         <select
           className="mt-1 block w-full rounded-xl border-2 border-border bg-card px-3 py-3 text-lg font-semibold text-foreground"
           value={stage?.id ?? ""}
-          onChange={(e) => setStageId(Number(e.target.value))}
+          onChange={(e) => choose({ stageId: Number(e.target.value) })}
         >
           {data.stages.map((s) => (
             <option key={s.id} value={s.id}>
@@ -623,7 +718,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           <select
             className="mt-1 block w-full rounded-xl border-2 border-border bg-card px-3 py-3 text-lg font-semibold text-foreground"
             value={session?.id ?? ""}
-            onChange={(e) => setSessionId(Number(e.target.value))}
+            onChange={(e) => choose({ sessionId: Number(e.target.value) })}
           >
             {sessions.map((s) => (
               <option key={s.id} value={s.id}>
@@ -635,22 +730,22 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
       ) : (
         <div className="-mx-4 mb-3 overflow-x-auto px-4" role="group" aria-label={dict.timing.point}>
           <div className="flex gap-2">
-            <button type="button" aria-pressed={point === "start"} onClick={() => setPoint("start")} className={chip(point === "start")}>
+            <button type="button" aria-pressed={activePoint === "start"} onClick={() => choose({ point: "start" })} className={chip(activePoint === "start")}>
               {dict.timing.start}
             </button>
             {checkpoints.map((cp) => (
               <button
                 key={cp.id}
                 type="button"
-                aria-pressed={point === `cp:${cp.id}`}
-                onClick={() => setPoint(`cp:${cp.id}`)}
-                className={chip(point === `cp:${cp.id}`)}
+                aria-pressed={activePoint === `cp:${cp.id}`}
+                onClick={() => choose({ point: `cp:${cp.id}` })}
+                className={chip(activePoint === `cp:${cp.id}`)}
                 title={localizedName(cp, lang)}
               >
                 {cp.code}
               </button>
             ))}
-            <button type="button" aria-pressed={point === "finish"} onClick={() => setPoint("finish")} className={chip(point === "finish")}>
+            <button type="button" aria-pressed={activePoint === "finish"} onClick={() => choose({ point: "finish" })} className={chip(activePoint === "finish")}>
               {dict.timing.finish}
             </button>
           </div>
@@ -694,11 +789,13 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           <span>{dict.timing.raceNumber}</span>
           <span>{stage?.type === "enduro_cross" ? (session ? sessionLabel(session) : "") : pointLabel()}</span>
         </div>
-        <div className="font-mono text-7xl font-black leading-tight tabular-nums sm:text-8xl" aria-live="polite">
+        <div className="font-mono text-6xl font-black leading-tight tabular-nums [@media(min-height:760px)]:text-7xl" aria-live="polite">
           {digits || "—"}
         </div>
         <div className="min-h-7 text-lg font-semibold">
-          {typedEntry ? (
+          {typedEntry && wrongClass ? (
+            <span className="text-bad">{dict.timing.wrongClass}</span>
+          ) : typedEntry ? (
             <span>
               {riderName(typedEntry.first_name, typedEntry.last_name, lang)}
               <span className="font-normal text-muted"> · {localizedName(classById.get(typedEntry.class_id) ?? { name: "" }, lang)}</span>
@@ -709,7 +806,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         </div>
         <button
           type="button"
-          onClick={() => setStampedAt(correctedNow(offset ?? 0))}
+          onClick={() => setStampedAt(correctedNow(offset ?? storedClockOffset()))}
           className={`mt-2 w-full rounded-xl py-2.5 text-base font-bold ${
             stampedAt ? "bg-foreground text-background" : "border-2 border-border"
           }`}
@@ -766,8 +863,8 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
             key={key}
             type="button"
             onClick={() => press(key)}
-            aria-label={key === "back" ? "⌫" : key === "clear" ? "C" : undefined}
-            className={`h-[4.5rem] rounded-2xl border-2 font-mono text-4xl font-bold active:scale-95 active:bg-border ${
+            aria-label={key === "back" ? dict.timing.deleteDigit : key === "clear" ? dict.timing.clearNumber : undefined}
+            className={`h-16 rounded-2xl border-2 [@media(min-height:800px)]:h-[4.5rem] font-mono text-4xl font-bold active:scale-95 active:bg-border ${
               key === "clear" || key === "back" ? "border-border bg-background text-muted" : "border-border bg-card"
             }`}
           >
@@ -780,12 +877,26 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         type="button"
         onClick={record}
         disabled={!typedEntry}
-        className="mb-4 h-20 w-full rounded-2xl bg-accent text-3xl font-black tracking-wide text-accent-foreground shadow-lg active:scale-[0.98] disabled:opacity-35 disabled:shadow-none"
+        className="sticky bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-10 mb-4 h-20 w-full rounded-2xl bg-accent text-3xl font-black tracking-wide text-accent-foreground shadow-[0_12px_30px_-8px_rgb(0_0_0/0.6)] active:scale-[0.98] disabled:bg-card-2 disabled:text-muted disabled:shadow-none"
       >
         {dict.timing.record}
       </button>
 
-      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">{dict.timing.recent}</h2>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">{dict.timing.recent}</h2>
+        {items.some((item) => item.status === "rejected") && eventId != null && (
+          <button
+            type="button"
+            onClick={async () => {
+              await retryRejected(eventId);
+              sync();
+            }}
+            className="rounded-full border-2 border-bad px-3 py-1 text-xs font-bold text-bad"
+          >
+            {dict.timing.retryRejected}
+          </button>
+        )}
+      </div>
       <ul className="space-y-2">
         {items.slice(0, 30).map((item) => {
           const at =
@@ -795,7 +906,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
             <li key={item.client_id} className={`flex items-start justify-between gap-3 rounded-xl border-2 border-l-8 border-border bg-card px-3 py-2 ${edge}`}>
               <div>
                 <div className={`text-lg font-bold ${item.status === "voided" ? "text-muted line-through" : ""}`}>{item.label}</div>
-                {item.error && <div className="text-sm text-bad">{item.error}</div>}
+                {item.error && <div className="text-sm text-bad">{dict.timing.errors[item.error as keyof typeof dict.timing.errors] ?? item.error}</div>}
               </div>
               <div className="text-right">
                 <div className="font-mono text-lg font-bold tabular-nums">{formatClock(at)}</div>
@@ -816,7 +927,14 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
                       {dict.timing.voidConfirm}
                     </button>
                   ) : (
-                    <button type="button" onClick={() => setConfirmVoid(item.client_id)} className="mt-1 text-sm text-muted underline">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        confirmShownAt.current = msNow();
+                        setConfirmVoid(item.client_id);
+                      }}
+                      className="mt-1 text-sm text-muted underline"
+                    >
                       {dict.timing.void}
                     </button>
                   ))}

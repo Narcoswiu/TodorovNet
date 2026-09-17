@@ -605,16 +605,34 @@ function cp1251(text) {
     return "bg + en";
   });
 
-  await step("officials' guide linked from the footer, in Bulgarian and English", async () => {
-    const page = await browser.newPage();
-    await page.goto(`${APP}/bg`, { waitUntil: "networkidle2" });
-    await page.evaluate(() => [...document.querySelectorAll("footer a")].find((a) => a.textContent.includes("Ръководство")).click());
-    await waitText(page, "Потвърди анулиране");
-    if (!page.url().endsWith("/bg/guide")) throw new Error(page.url());
-    await page.goto(`${APP}/en/guide`, { waitUntil: "networkidle2" });
-    await waitText(page, "Declare official");
-    await page.close();
-    return "bg + en";
+  await step("manual is staff-only: guests get a sign-in wall, officials see it in BG and EN", async () => {
+    const guest = await browser.newPage();
+    await guest.goto(`${APP}/bg/guide`, { waitUntil: "networkidle2" });
+    await waitText(guest, "Наръчникът е за съдии");
+    const leaked = await guest.evaluate(() => document.body.innerText.includes("Потвърди анулиране"));
+    await guest.close();
+    if (leaked) throw new Error("the manual is visible without signing in");
+    const pdf = await fetch(`${APP}/api/pdf/manual?lang=bg`);
+    if (pdf.status !== 403) throw new Error(`manual PDF without login: ${pdf.status}`);
+
+    await admin.goto(`${APP}/bg/guide`, { waitUntil: "networkidle2" });
+    await waitText(admin, "Потвърди анулиране");
+    await admin.goto(`${APP}/en/guide`, { waitUntil: "networkidle2" });
+    await waitText(admin, "Declare official");
+    return "wall + bg + en";
+  });
+
+  await step("staff door: one page with admin, timing and the manual", async () => {
+    const guest = await browser.newPage();
+    await guest.goto(`${APP}/bg`, { waitUntil: "networkidle2" });
+    await guest.evaluate(() => [...document.querySelectorAll("header a")].find((a) => a.textContent.trim() === "За съдии").click());
+    await waitText(guest, "За съдии и организатори");
+    await waitText(guest, "Нямате акаунт");
+    await guest.close();
+    await admin.goto(`${APP}/bg/staff`, { waitUntil: "networkidle2" });
+    await waitText(admin, "admin@demo.local");
+    for (const label of ["Администрация", "Хронометраж"]) await waitText(admin, label);
+    return "guest and signed in";
   });
 
   await step("results archive: one section per year with finished events or seasons, BG and EN", async () => {
@@ -719,6 +737,11 @@ function cp1251(text) {
 
   await step("timekeeper voids a record from the phone list (two-step)", async () => {
     await clickButton(timer, "Анулирай", `#${riders[2]} ·`);
+    // A confirm faster than 0.7 s is ignored on purpose (double tap protection).
+    await clickButton(timer, "Потвърди анулиране", `#${riders[2]} ·`);
+    const stillActive = sql(`select count(*) from passings p join entries e on e.id = p.entry_id where p.stage_id = ${demoStage} and e.race_number = ${riders[2]} and p.point = 'finish' and p.voided_at is null`);
+    if (stillActive !== "1") throw new Error("a double tap voided the record");
+    await sleep(900);
     await clickButton(timer, "Потвърди анулиране", `#${riders[2]} ·`);
     await timer.waitForFunction(
       (label) => [...document.querySelectorAll("li")].some((li) => li.innerText.includes(label) && li.innerText.includes("Анулиран")),

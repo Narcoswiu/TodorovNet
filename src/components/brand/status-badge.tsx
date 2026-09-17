@@ -4,7 +4,7 @@ import type { Dictionary } from "@/i18n/get-dictionary";
 export function StatusBadge({ status, dict, className = "" }: { status: string; dict: Dictionary; className?: string }) {
   if (status === "live") {
     return (
-      <span className={`inline-flex items-center gap-2 rounded-full bg-bad px-3 py-1 text-xs font-bold uppercase tracking-wider text-white ${className}`}>
+      <span className={`inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white ${className}`}>
         <span className="live-dot size-2 rounded-full bg-white" aria-hidden />
         {dict.home.live}
       </span>

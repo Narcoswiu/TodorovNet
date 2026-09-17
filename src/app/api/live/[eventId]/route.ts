@@ -5,6 +5,12 @@ import { createPublicClient } from "@/lib/supabase/public";
 // Public data only, read without cookies, and cached at the edge for a few seconds: however many people
 // watch, the database answers about one query per stage every 5 seconds.
 const CACHED = { "Cache-Control": "public, max-age=0, s-maxage=5, stale-while-revalidate=5" };
+const MEMORY_MS = 3000;
+
+// The edge cache absorbs the crowd, but a realtime change makes every viewer refetch at the same
+// second. This keeps the last answer per stage for a moment, so one burst is one database query.
+const memory = new Map<string, { at: number; body: string }>();
+
 const notFound = () => Response.json({ error: "not found" }, { status: 404, headers: CACHED });
 
 export async function GET(request: Request, { params }: RouteContext<"/api/live/[eventId]">) {
@@ -27,8 +33,17 @@ export async function GET(request: Request, { params }: RouteContext<"/api/live/
     selector = { kind: stage.type, stageId };
   }
 
+  const key = `${eventId}:${stageParam}:${search.get("ranking") ?? ""}`;
+  const fresh = memory.get(key);
+  if (fresh && Date.now() - fresh.at < MEMORY_MS) {
+    return new Response(fresh.body, { headers: { ...CACHED, "Content-Type": "application/json" } });
+  }
+
   try {
-    return Response.json(await loadView(supabase, eventId, selector), { headers: CACHED });
+    const body = JSON.stringify(await loadView(supabase, eventId, selector));
+    memory.set(key, { at: Date.now(), body });
+    if (memory.size > 64) for (const [k, v] of memory) if (Date.now() - v.at > MEMORY_MS) memory.delete(k);
+    return new Response(body, { headers: { ...CACHED, "Content-Type": "application/json" } });
   } catch {
     return Response.json({ error: "unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }

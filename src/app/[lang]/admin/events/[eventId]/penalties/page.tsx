@@ -43,7 +43,7 @@ export default async function EventPenaltiesPage({ params }: PageProps<"/[lang]/
   const viewer = await requireViewer(lang, `/${lang}/admin/events/${eventId}/penalties`);
   const { supabase } = viewer;
 
-  const [roles, { data: stages }, { data: types }, { data: penalties }, { data: statuses }] = await Promise.all([
+  const [roles, { data: stages }, { data: types }, { data: penalties }, { data: statuses }, { data: sessions }] = await Promise.all([
     getEventRoles(viewer, eventId),
     supabase.from("stages").select("id, name, name_en, type, day_number").eq("event_id", eventId).order("day_number").order("sort_order"),
     supabase
@@ -61,15 +61,32 @@ export default async function EventPenaltiesPage({ params }: PageProps<"/[lang]/
       .order("created_at", { ascending: false }),
     supabase
       .from("rider_statuses")
-      .select("id, stage_id, status, reason, entries(race_number, riders(first_name, last_name))")
+      .select("id, stage_id, session_id, status, reason, entries(race_number, riders(first_name, last_name))")
+      .eq("event_id", eventId),
+    supabase
+      .from("sessions")
+      .select("id, stage_id, kind, number, group_label, event_classes(classes(name, name_en))")
       .eq("event_id", eventId)
-      .is("session_id", null),
+      .order("class_id")
+      .order("kind")
+      .order("number"),
   ]);
 
   const canReview = viewer.isSuperAdmin || roles.has("jury") || roles.has("jury_chair");
   const labels = { day: dict.event.day, stageType: dict.stageType };
   const stageLabel = new Map((stages ?? []).map((stage) => [stage.id, stageName(stage, lang, labels)]));
-  const stageOptions = (stages ?? []).map((stage) => ({ value: stage.id, label: stageName(stage, lang, labels) }));
+  // Enduro-cross penalties and statuses belong to a heat: each heat is offered as "stage:session".
+  const sessionLabel = (session: NonNullable<typeof sessions>[number]) =>
+    `${session.event_classes?.classes ? localizedName(session.event_classes.classes, lang) : ""} ${session.kind === "qualifying" ? "Q" : `H${session.number}`}${session.group_label ? ` ${session.group_label}` : ""}`;
+  const heatLabel = new Map((sessions ?? []).map((session) => [session.id, sessionLabel(session)]));
+  const stageOptions = (stages ?? []).flatMap((stage) => [
+    { value: stage.id, label: stage.type === "enduro_cross" ? `${stageName(stage, lang, labels)} · ${p.wholeDay}` : stageName(stage, lang, labels) },
+    ...(stage.type === "enduro_cross"
+      ? (sessions ?? [])
+          .filter((session) => session.stage_id === stage.id)
+          .map((session) => ({ value: `${stage.id}:${session.id}`, label: `${stageName(stage, lang, labels)} · ${sessionLabel(session)}` }))
+      : []),
+  ]);
   const statusTone: Record<string, string> = { proposed: "text-warn", confirmed: "text-good", rejected: "text-muted line-through" };
 
   return (
@@ -176,7 +193,10 @@ export default async function EventPenaltiesPage({ params }: PageProps<"/[lang]/
             <li key={row.id} className="flex justify-between gap-2 py-1.5">
               <span>
                 #{row.entries?.race_number} {row.entries?.riders?.first_name} {row.entries?.riders?.last_name}
-                <span className="ml-2 text-xs text-muted">{stageLabel.get(row.stage_id)}</span>
+                <span className="ml-2 text-xs text-muted">
+                  {stageLabel.get(row.stage_id)}
+                  {row.session_id ? ` · ${heatLabel.get(row.session_id) ?? ""}` : ""}
+                </span>
               </span>
               <span className="text-xs">
                 <span className="font-medium">{dict.status[row.status as keyof typeof dict.status] || row.status.toUpperCase()}</span>

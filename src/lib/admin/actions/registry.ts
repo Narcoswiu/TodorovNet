@@ -68,3 +68,20 @@ export async function releaseSeasonNumber(_previous: ActionResult, formData: For
   refresh();
   return { ok: true };
 }
+
+/** Marks a season final: from then on its standings drop the worst round (Р XVIII.3). Reversible. */
+export async function setSeasonFinal(_previous: ActionResult, formData: FormData): Promise<ActionResult> {
+  const { dict } = formContext(formData);
+  const viewer = await getViewer();
+  const seasonId = intField(formData, "season_id");
+  const final = textField(formData, "final") === "true";
+  if (!viewer?.isSuperAdmin) return { ok: false, error: dict.admin.errors.forbidden };
+  if (!isValidId(seasonId)) return { ok: false, error: dict.admin.errors.invalid };
+
+  const { data, error } = await viewer.supabase.from("seasons").update({ is_final: final }).eq("id", seasonId).select("id");
+  if (error) return { ok: false, error: explainDbError(error, dict) };
+  if (!data?.length) return { ok: false, error: dict.admin.errors.forbidden };
+
+  refresh();
+  return { ok: true, message: dict.admin.saved };
+}

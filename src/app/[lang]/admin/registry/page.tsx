@@ -7,7 +7,7 @@ import { ImportEntries } from "@/components/admin/import-entries";
 import { hasLocale, t } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
 import { localizedName } from "@/i18n/localize";
-import { importSeasonNumbers, registerSeasonNumber, releaseSeasonNumber } from "@/lib/admin/actions/registry";
+import { importSeasonNumbers, registerSeasonNumber, releaseSeasonNumber, setSeasonFinal } from "@/lib/admin/actions/registry";
 import { requireViewer } from "@/lib/auth";
 
 export default async function RegistryPage({ params, searchParams }: PageProps<"/[lang]/admin/registry">) {
@@ -19,7 +19,7 @@ export default async function RegistryPage({ params, searchParams }: PageProps<"
   const viewer = await requireViewer(lang, `/${lang}/admin/registry`);
   if (!viewer.isSuperAdmin) notFound();
 
-  const { data: seasons } = await viewer.supabase.from("seasons").select("id, year, name").order("year", { ascending: false });
+  const { data: seasons } = await viewer.supabase.from("seasons").select("id, year, name, is_final").order("year", { ascending: false });
   const { season: seasonParam } = await searchParams;
   const season = (seasons ?? []).find((s) => String(s.id) === seasonParam) ?? seasons?.[0];
   if (!season) notFound();
@@ -51,6 +51,17 @@ export default async function RegistryPage({ params, searchParams }: PageProps<"
           </Link>
         </nav>
       </div>
+
+      <Card title={r.finalTitle}>
+        <p className="mb-3 text-sm text-muted">{season.is_final ? r.finalOn : r.finalOff}</p>
+        <ActionButton
+          action={setSeasonFinal}
+          fields={{ lang, season_id: season.id, final: season.is_final ? "false" : "true" }}
+          label={season.is_final ? r.finalUndo : r.finalMark}
+          pendingLabel={dict.common.loading}
+          tone={season.is_final ? "default" : "good"}
+        />
+      </Card>
 
       <Card title={r.add}>
         <ActionForm action={registerSeasonNumber} submitLabel={r.add} pendingLabel={dict.common.loading}>

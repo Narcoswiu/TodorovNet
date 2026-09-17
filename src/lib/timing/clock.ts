@@ -9,18 +9,26 @@ const OFFSET_KEY = "todorovnet.clockOffsetMs";
  * round trip, so the error is at most half the network latency.
  */
 export async function measureClockOffset(supabase: SupabaseClient<Database>): Promise<number | null> {
-  const sentAt = Date.now();
-  const { data, error } = await supabase.rpc("server_time");
-  const receivedAt = Date.now();
-  if (error || !data) return null;
-
-  const offset = new Date(data).getTime() - (sentAt + receivedAt) / 2;
+  // Three samples; the one with the shortest round trip is the most accurate. A slow or hanging request
+  // (a token refresh, a weak signal) is dropped instead of skewing the clock.
+  let best: { offset: number; roundTrip: number } | null = null;
+  for (let i = 0; i < 3; i++) {
+    const sentAt = Date.now();
+    const { data, error } = await supabase.rpc("server_time").abortSignal(AbortSignal.timeout(4000));
+    const receivedAt = Date.now();
+    if (error || !data) continue;
+    const roundTrip = receivedAt - sentAt;
+    if (roundTrip > 1500) continue;
+    const offset = new Date(data).getTime() - (sentAt + receivedAt) / 2;
+    if (!best || roundTrip < best.roundTrip) best = { offset, roundTrip };
+  }
+  if (!best) return null;
   try {
-    localStorage.setItem(OFFSET_KEY, String(offset));
+    localStorage.setItem(OFFSET_KEY, String(best.offset));
   } catch {
     // Private mode: the offset still applies for this session.
   }
-  return offset;
+  return best.offset;
 }
 
 export function storedClockOffset(): number {
