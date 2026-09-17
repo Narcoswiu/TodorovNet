@@ -1,20 +1,42 @@
-## .NET
-bin/
-obj/
-*.user
-*.suo
-.vs/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-## macOS
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
 .DS_Store
+*.pem
 
-## Secrets - do not commit real settings
-appsettings.json
-appsettings.*.local.json
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-## Claude Code local state (contains a nested git worktree - must stay out of the repo)
-.claude/
+# env files (can opt-in for committing if needed)
+.env*
 
-## Logs
-*.log
-*.bak
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+!.env.example
