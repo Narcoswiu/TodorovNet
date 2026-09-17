@@ -15,7 +15,7 @@ live standings for the crowd, GPS penalty checks, protests and signed-off result
 [![Vercel](https://img.shields.io/badge/Hosted_on-Vercel-000000?logo=vercel&logoColor=white)](https://todorovnet.vercel.app)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-**[Live site](https://todorovnet.vercel.app)** · **[Officials' guide](https://todorovnet.vercel.app/en/guide)** · **[BG-X rules in code](docs/bgx-rules.md)**
+**[Live site](https://todorovnet.vercel.app)** · **[BG-X rules in code](docs/bgx-rules.md)** · **[Officials' manual](https://todorovnet.vercel.app/en/guide)** (sign-in required)
 
 </div>
 
@@ -57,7 +57,7 @@ signal drops, never loses a record, and derives every standing from the raw fact
   pages switch to polling an edge-cached endpoint, so the database load stays flat.
 - **Start lists, season standings (riders and teams), rider profiles and a results archive.**
 - **Bulgarian and English everywhere**, including official Bulgarian transliteration of names.
-- **PDFs** of start lists, results and season standings.
+- **PDFs** of start lists, results and season standings, rendered from the frozen publication.
 
 ### For organizers and the jury
 
@@ -72,6 +72,10 @@ signal drops, never loses a record, and derives every standing from the raw fact
   results official.
 - **Enduro-cross formats.** Qualifying groups A/B, a top-12 finals grid, and red flag "count or restart".
 - **Roles per event:** organizer, timekeeper, GPS judge, jury and jury chair, enforced by the database.
+- **One door for officials** at `/[lang]/staff`: sign in, then admin, timing and the manual; officials
+  change their own password there.
+- **Officials' manual** at `/[lang]/guide` and as a printable PDF (`/api/pdf/manual`): chapters per job,
+  a role permission table, a race-day checklist and troubleshooting. Riders never see it: it needs an account.
 
 <table>
   <tr>
@@ -161,7 +165,7 @@ The demo seed signs in with these local-only accounts (password `demo-todorovnet
 | `npm run test:unit` | GPS analysis: deviation, signal gaps, missed waypoints |
 | `npm run db:test` | SQL scenarios: results, points, penalties, publications, permissions (runs in a rolled-back transaction) |
 | `npm run e2e` | Timing API end to end, including realtime delivery |
-| `npm run test:browser` | 44 real-browser steps: admin panel, imports, photo upload, GPS check, protests, publishing, and the timing app online, offline and reopened without a connection |
+| `npm run test:browser` | 45 real-browser steps: admin panel, imports, photo upload, GPS check, protests, publishing, staff-only access, and the timing app online, offline and reopened without a connection |
 
 Run the browser tests against a production build, because offline reopening needs the service worker:
 
@@ -195,9 +199,9 @@ src/
   app/[lang]/        Public pages (bg/en): events, seasons, riders, archive, guide, privacy, login
   app/[lang]/admin/  Admin panel, one tab per task
   app/[lang]/t/      Offline-first timing app
-  app/api/           Live standings, PDFs, locale switch, keep-alive
+  app/api/           Live standings, PDFs (results, season, start list, manual), locale switch, keep-alive
   components/        UI: results tables, timing app, admin forms
-  i18n/              Dictionaries (Bulgarian is the source of truth) and transliteration
+  i18n/              Dictionaries (Bulgarian is the source of truth), the manual text and transliteration
   lib/               Auth, results queries, GPS analysis, PDF documents, offline queue
 supabase/
   migrations/        Schema, BG-X reference data, results views, functions, policies
