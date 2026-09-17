@@ -1,188 +1,234 @@
 <div align="center">
 
-# 🏁 TodorovNET.API
+# 🏁 TodorovNET
 
-**A real-time race-timing backend for hard enduro / off-road events**
+**Live timing and results for hard enduro, built for race day in the mountains.**
 
-[![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
-[![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-Web_API-512BD4?logo=dotnet&logoColor=white)](https://learn.microsoft.com/aspnet/core)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![EF Core](https://img.shields.io/badge/EF_Core-ORM-512BD4?logo=dotnet&logoColor=white)](https://learn.microsoft.com/ef/core/)
-[![SignalR](https://img.shields.io/badge/SignalR-Real--time-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/apps/aspnet/signalr)
-[![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
-[![License](https://img.shields.io/badge/License-MIT-green)](#license)
+Official-grade timing for the Bulgarian Hard Enduro Championship (BG-X): offline-first phones on the course,
+live standings for the crowd, GPS penalty checks, protests and signed-off results, in Bulgarian and English.
+
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-Postgres_17-3FCF8E?logo=supabase&logoColor=white)](https://supabase.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Vercel](https://img.shields.io/badge/Hosted_on-Vercel-000000?logo=vercel&logoColor=white)](https://todorovnet.vercel.app)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
+**[Live site](https://todorovnet.vercel.app)** · **[Officials' guide](https://todorovnet.vercel.app/en/guide)** · **[BG-X rules in code](docs/bgx-rules.md)**
 
 </div>
 
+<p align="center">
+  <img src="docs/screenshots/live-results-en.png" alt="Live standings for a navigation stage, with positions, gaps and championship points" width="100%">
+</p>
+
 ---
 
-A REST API + real-time backend for running hard enduro / off-road race events —
-managing riders, race classes, live results, penalties, and multi-day event
-schedules, with a live-updating public leaderboard powered by SignalR.
+## Why it exists
 
-Built as a full end-to-end system: relational data model, JWT-secured admin
-API, role-based access, CSV rider import, and a real-time public results
-board — the kind of backend a small event-timing company would actually run
-on race day.
+A hard enduro stage runs for hours across mountains with patchy coverage. Timekeepers sit at checkpoints
+with a phone, GPS judges review hundreds of tracks after the finish, and hundreds of people refresh the
+standings on the way down. The results have to be right, provably right, and published the way the
+rulebook says.
+
+TodorovNET replaces paper sheets and manual spreadsheets with one system that keeps working when the
+signal drops, never loses a record, and derives every standing from the raw facts recorded on the course.
 
 ## Features
 
-- **Event management** — create/update events, track status and race flag
-  (e.g. green/red/checkered) in real time
-- **Riders** — CRUD per event, plus **CSV import** for bulk rider entry
-- **Race classes** — configurable classes per event (laps, special stages,
-  navigation, start groups) with riders assigned to classes
-- **Multi-day schedule** — event days broken into segments (prologue, special
-  stages, cross-country laps, etc.)
-- **Live results & standings** — record results per rider/segment and compute
-  standings on the fly, filterable by class
-- **Penalties** — submit, confirm, or reject time/position penalties per rider
-- **Contestations** — riders can raise a dispute against a penalty or result
-- **Auth** — JWT-based login; a hardcoded super-admin (via config) plus a
-  `Users` table for scoped roles (e.g. per-event timing staff)
-- **Real-time updates** — a SignalR hub (`/hubs/race`) broadcasts live event
-  updates to all connected clients grouped by event, so the public leaderboard
-  updates without polling
-- **Public results page** (`wwwroot/public.html`) and a full **admin panel**
-  (`wwwroot/admin.html`) served as static files by the same API
+### On the course
+
+- **Offline-first timing app.** Records go to an on-device queue (IndexedDB) and sync on their own when
+  there is signal. The app reopens with no coverage through a service worker.
+- **Server-synced clock.** Every time is corrected by the measured offset to the server clock, not the
+  phone's own time.
+- **Can't double-count.** Every record carries a client-generated UUID, so resends after a timeout are
+  stored exactly once. Duplicates at the same point are rejected and shown.
+- **Paper backup.** Timekeepers can enter a time by hand from a paper sheet, or void a mistake in two steps.
+- **Enduro-cross heats.** Start a heat and raise a **red flag** from the phone.
+- **SOS and course messages.** They carry the race number and the phone's location, and reach the
+  organizer and the jury live with an alarm.
+
+### For the public
+
+- **Live standings** per stage and class, with gaps, penalties and championship points.
+- **Built for crowds.** Updates arrive through realtime pushes. When the connection limit is reached,
+  pages switch to polling an edge-cached endpoint, so the database load stays flat.
+- **Start lists, season standings (riders and teams), rider profiles and a results archive.**
+- **Bulgarian and English everywhere**, including official Bulgarian transliteration of names.
+- **PDFs** of start lists, results and season standings.
+
+### For organizers and the jury
+
+- **Event setup.** Classes, entries (Excel/CSV import, including Windows-1251 files), stages, checkpoints,
+  per-class start settings and generated start lists.
+- **Eligibility checks** for age, licence, club and registered race number.
+- **GPS track check** in the browser. It compares a rider's GPX with the official track, finds deviations,
+  signal gaps and missed waypoints, and proposes the rulebook penalty with a map as evidence.
+- **Penalties with review.** GPS judges propose, the jury confirms. Statuses like DNF and DSQ are supported.
+- **Protests** with the fee, deadlines and written decisions.
+- **Publishing.** Provisional results are frozen into numbered versions. Only the jury chair can declare
+  results official.
+- **Enduro-cross formats.** Qualifying groups A/B, a top-12 finals grid, and red flag "count or restart".
+- **Roles per event:** organizer, timekeeper, GPS judge, jury and jury chair, enforced by the database.
+
+<table>
+  <tr>
+    <td width="30%"><img src="docs/screenshots/timing-app.png" alt="Timing app on a phone: stage, point, number keypad, record button and SOS"></td>
+    <td width="70%">
+      <img src="docs/screenshots/admin-stage.png" alt="Admin panel: stage settings with per-class start configuration"><br><br>
+      <img src="docs/screenshots/admin-penalties.png" alt="Admin panel: penalties proposed by GPS judges, confirmed or rejected by the jury">
+    </td>
+  </tr>
+</table>
+
+## How it works
+
+```
+ Phones on the course                 Supabase (Postgres 17, EU)                 Everyone else
+ ─────────────────────                ───────────────────────────                ─────────────
+ IndexedDB queue  ── insert ──▶  raw facts: passings, laps,         ──▶  SQL views: navigation,
+ client_id UUID                  penalties, statuses, sessions             enduro-cross, round,
+ clock offset                    (void, never delete · audit log)          season, team standings
+                                          │                                        │
+                                  Row Level Security                  /api/live (edge-cached 5 s)
+                                  per event and role                  realtime "something changed"
+                                                                                   │
+                                                                  Next.js on Vercel (fra1) ──▶ browser
+```
+
+A few decisions shape the whole codebase:
+
+- **Facts in, results derived.** The database stores only what happened on the course. Positions, gaps,
+  points, drop-worst-round and team standings are SQL views, so fixing a fact fixes every result built
+  from it.
+- **Nothing is deleted.** Records are voided with a reason, and every change lands in an audit log with
+  its author and time. The jury can always see what changed.
+- **Publications are frozen.** Publishing stores a snapshot with a version number. PDFs are rendered
+  from the snapshot, not from live data.
+- **The database is the authority.** Access rules live in Postgres Row Level Security and guarded
+  functions, not only in the UI.
+- **The rulebook is the spec.** Points scales, penalty brackets, course close, tie-breaks and protest
+  windows follow the BG-X rules, documented in [`docs/bgx-rules.md`](docs/bgx-rules.md) and asserted in
+  SQL tests.
 
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
-| Runtime | .NET 10 / ASP.NET Core Web API |
-| Database | PostgreSQL via Entity Framework Core (Npgsql) |
-| Real-time | SignalR |
-| Auth | JWT Bearer tokens |
-| Frontend | Static HTML/CSS/JS admin panel + public results page (no build step) |
-
-## Architecture
-
-```
-Controllers/   REST endpoints (Events, Riders, Classes, Schedule, Results,
-               Penalties, Users, Auth, Import)
-Models/        EF Core entities (Event, Rider, RaceClass, Result, Penalty,
-               Contestation, EventDay/EventSegment, User)
-Data/          AppDbContext + entity configuration
-Hubs/          RaceHub — SignalR hub for live event broadcasts
-Migrations/    EF Core migrations (schema history)
-wwwroot/       Static admin panel + public leaderboard (served directly
-               by the API, no separate frontend deployment needed)
-```
-
-## API overview
-
-All endpoints are under `/api`. Most are scoped per event:
-`/api/events/{eventId}/...`
-
-| Resource | Endpoints |
-|---|---|
-| Auth | `POST /api/auth/login` |
-| Events | `GET/POST /api/events`, `GET/PUT/DELETE /api/events/{id}`, `PUT .../flag`, `PUT .../status`, `PATCH .../image` |
-| Riders | `GET/POST /api/events/{eventId}/riders`, `GET/PUT/DELETE .../{id}` |
-| Rider import | `POST /api/events/{eventId}/import/riders` (CSV upload) |
-| Classes | `GET/POST /api/events/{eventId}/classes`, `POST .../{id}/riders`, `DELETE .../{id}/riders/{riderId}`, `POST .../seed`, `DELETE .../{id}` |
-| Schedule | `GET /api/events/{eventId}/schedule`, `POST/DELETE .../days`, `POST/DELETE .../days/{dayId}/segments` |
-| Results | `GET /api/events/{eventId}/results`, `GET .../standings`, `POST .../results`, `PUT .../rider/{raceNumber}/status` |
-| Penalties | `GET/POST /api/events/{eventId}/penalties`, `PUT .../{id}/confirm`, `PUT .../{id}/reject`, `DELETE .../{id}` |
-| Users (admin) | `GET/POST /api/users`, `PATCH .../{id}/password`, `PATCH .../{id}/active`, `DELETE .../{id}` |
-
-Real-time: clients connect to the SignalR hub at `/hubs/race` and join an
-event's group (`JoinEvent(eventId)`) to receive live updates for that event.
-
-## Prerequisites
-
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- PostgreSQL (local install or Docker)
+| App | Next.js 16 (App Router, server actions), React 19, TypeScript |
+| Styling | Tailwind CSS 4 |
+| Database and auth | Supabase: Postgres 17, Row Level Security, Auth, Realtime, Storage |
+| Offline | Service worker, IndexedDB (`idb`) |
+| Documents | `@react-pdf/renderer` with Noto Sans (Cyrillic and Latin) |
+| Imports | `read-excel-file`, `papaparse` |
+| Hosting | Vercel (Frankfurt) with a daily keep-alive cron |
+| Testing | SQL scenario tests, Node test runner, Puppeteer end-to-end browser tests |
 
 ## Getting started
 
-1. Clone and enter the project:
+**Requirements:** Node.js 20+, Docker Desktop, Google Chrome (only for the browser tests).
 
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/TodorovNET.API.git
-   cd TodorovNET.API
-   ```
+```bash
+git clone https://github.com/Narcoswiu/TodorovNet.git
+cd TodorovNet
+npm install
 
-2. Copy the example config and fill in your local values:
+# Local Supabase in Docker: database, auth, storage, realtime
+npx supabase start
+npx supabase db reset          # schema + BG-X reference data + a demo event
 
-   ```bash
-   cp appsettings.json.example appsettings.json
-   ```
+cp .env.example .env.local     # fill in the URL and publishable key from `npx supabase status`
+npm run dev                    # http://localhost:3000
+```
 
-   ```jsonc
-   {
-     "ConnectionStrings": {
-       "DefaultConnection": "Host=localhost;Database=todorovnet;Username=YOUR_DB_USER;Password=YOUR_DB_PASSWORD;Timezone=UTC"
-     },
-     "Jwt": { "Key": "a-long-random-secret", "Issuer": "TodorovNET", "Audience": "TodorovNET" },
-     "Admin": { "Username": "admin", "Password": "choose-a-strong-password" }
-   }
-   ```
+The demo seed signs in with these local-only accounts (password `demo-todorovnet`):
 
-3. Make sure PostgreSQL is running and the database/user in your connection
-   string exist, e.g.:
+| Email | Role |
+|---|---|
+| `admin@demo.local` | Super admin |
+| `timer@demo.local` | Timekeeper |
+| `gps@demo.local` | GPS judge |
+| `jury@demo.local` | Jury and jury chair |
 
-   ```bash
-   createdb todorovnet
-   ```
+## Testing
 
-4. Apply migrations:
+| Command | What it checks |
+|---|---|
+| `npm run typecheck` | TypeScript, including generated route types |
+| `npm run lint` | ESLint |
+| `npm run test:unit` | GPS analysis: deviation, signal gaps, missed waypoints |
+| `npm run db:test` | SQL scenarios: results, points, penalties, publications, permissions (runs in a rolled-back transaction) |
+| `npm run e2e` | Timing API end to end, including realtime delivery |
+| `npm run test:browser` | 43 real-browser steps: admin panel, imports, GPS check, protests, publishing, and the timing app online, offline and reopened without a connection |
 
-   ```bash
-   dotnet ef database update
-   ```
+Run the browser tests against a production build, because offline reopening needs the service worker:
 
-5. Run the API:
+```bash
+npx supabase db reset && npm run build && npx next start --port 3001
+APP=http://localhost:3001 npm run test:browser
+```
 
-   ```bash
-   dotnet run
-   ```
+## Deployment
 
-   The console prints the listening URL (e.g. `http://localhost:5048`).
+1. Create a Supabase project in an EU region and apply the schema with `npx supabase link` and
+   `npx supabase db push`. The demo seed is local only.
+2. In Supabase Auth, disable public sign-ups, set the Site URL, and create the first user. Promote that
+   user with `update public.profiles set is_super_admin = true where id = …`.
+3. Create a Vercel project and set these environment variables:
 
-## Trying it out
+   | Variable | Value |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
+   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key |
+   | `NEXT_PUBLIC_OPERATOR_NAME` | Shown on the privacy page |
+   | `NEXT_PUBLIC_CONTACT_EMAIL` | Data-protection contact |
 
-- Public leaderboard: `http://localhost:5048/public.html`
-- Admin panel: `http://localhost:5048/admin.html` — log in with the
-  `Admin:Username` / `Admin:Password` from your `appsettings.json`
-- Raw API: e.g. `GET http://localhost:5048/api/events`
+4. Deploy with `npx vercel deploy --prod`. `vercel.json` pins functions to Frankfurt and schedules the
+   daily keep-alive.
 
-The admin/public pages call the API at `window.location.origin + '/api'`, so
-they work unmodified whether you run locally or deploy to a real domain.
+## Project structure
 
-## Notes on design decisions
+```
+src/
+  app/[lang]/        Public pages (bg/en): events, seasons, riders, archive, guide, privacy, login
+  app/[lang]/admin/  Admin panel, one tab per task
+  app/[lang]/t/      Offline-first timing app
+  app/api/           Live standings, PDFs, locale switch, keep-alive
+  components/        UI: results tables, timing app, admin forms
+  i18n/              Dictionaries (Bulgarian is the source of truth) and transliteration
+  lib/               Auth, results queries, GPS analysis, PDF documents, offline queue
+supabase/
+  migrations/        Schema, BG-X reference data, results views, functions, policies
+  seed.sql           Local demo event
+  tests/             SQL scenarios and end-to-end timing checks
+tests/browser/       Puppeteer tests against a running app
+docs/                BG-X rules reference and screenshots
+```
 
-- **Config-driven super-admin + DB-backed users**: the single super-admin
-  account lives in config rather than the database, so the very first login
-  never depends on data already existing in a fresh database. Additional
-  scoped users (e.g. per-event timing staff) are created afterwards through
-  the `Users` API.
-- **Enum-to-string conversion**: enums (event status, rider license status,
-  penalty type, etc.) are stored as strings in PostgreSQL rather than
-  integers, so the raw data stays human-readable when inspected directly in
-  the database.
-- **Event-scoped routes**: most resources are nested under `/api/events/{id}`
-  because almost every entity in the domain (riders, classes, results,
-  penalties, schedule) only makes sense in the context of a specific event.
+---
 
-## Known limitations / possible next steps
+<details>
+<summary><b>🇧🇬 На български</b></summary>
 
-- No automated tests yet
-- `appsettings.json` is git-ignored by design (see below) — a
-  production deployment should use environment variables or a secrets
-  manager instead of a committed file
-- CORS is currently wide open (`AllowAnyOrigin`) for local development
-  convenience; should be locked down to the real frontend origin(s) in
-  production
+**TodorovNET** е система за хронометраж и класиране на хард ендуро състезания по правилата на BG-X.
 
-## Security
+- **Хронометраж от телефона.** Работи и без покритие: записите се пазят в телефона и се изпращат сами.
+  Има ръчен час, анулиране, червен флаг и SOS.
+- **Класиране на живо.** По етапи, класове и сезон, с точки, разлики и наказания. Издържа много
+  зрители едновременно.
+- **GPS проверка на траковете.** Системата сама предлага наказание по правилника, с карта като доказателство.
+- **Жури.** Потвърждава наказанията, решава протестите и публикува резултатите. Официалните резултати
+  се обявяват от председателя на журито.
+- **PDF документи** на стартовите списъци, резултатите и генералното класиране.
+- **Всичко е на български и английски.**
 
-`appsettings.json` is intentionally excluded from version control (see
-`.gitignore`) because it holds the database password, JWT signing key, and
-admin password. Use `appsettings.json.example` as a template and never commit
-real secrets.
+Сайт: **[todorovnet.vercel.app](https://todorovnet.vercel.app)** · Ръководство за съдии:
+**[todorovnet.vercel.app/bg/guide](https://todorovnet.vercel.app/bg/guide)**
+
+</details>
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE) © 2026 Nikolai Todorov
