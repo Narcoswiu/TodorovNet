@@ -190,6 +190,30 @@ begin
   select * into got from public.team_season_standings where season_id = v_season and club_id = v_club;
   assert got.team_points = 90 and got.rounds_scored = 3, 'team season: plain sum 90, got ' || got.team_points;
 
+  -- ── Interim standings keep every round; the worst round goes only once the season is final ──
+  assert not (select drop_applies from public.season_standings where season_id = v_season and rider_id = r1),
+    'interim standings do not drop a round';
+  update public.seasons set is_final = true where id = v_season;
+  assert (select drop_applies from public.season_standings where season_id = v_season and rider_id = r1),
+    'final standings drop the worst round';
+  update public.seasons set is_final = false where id = v_season;
+
+  -- ── Team round: the club total is the best rider's round points; the rank earns team points ──
+  select * into got from public.team_round_results where event_id = v_event and club_id = v_club;
+  assert got.club_points = 40, 'team club total is the best Pro round total (40), got ' || got.club_points;
+
+  -- ── Guards: publications only through publish_results; a checkpoint must be on the passing's stage ──
+  declare
+    failed boolean := false;
+  begin
+    begin
+      insert into public.publications (event_id, stage_id, state, snapshot) values (v_event, v_nav, 'provisional', '{}');
+    exception when others then
+      failed := sqlerrm like '%only through publish_results%';
+    end;
+    assert failed, 'a hand-made publication is refused';
+  end;
+
   -- ── Publication: numbered versions with a frozen copy of the classification ──
   declare
     v_pub bigint;

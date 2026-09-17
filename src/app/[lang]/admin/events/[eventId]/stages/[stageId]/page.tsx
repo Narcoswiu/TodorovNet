@@ -110,7 +110,7 @@ export default async function StageDetailPage({ params }: PageProps<"/[lang]/adm
         <ActionForm action={saveStageClasses} submitLabel={dict.admin.save} pendingLabel={dict.common.loading}>
           {hidden}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[40rem] text-sm">
               <thead className="text-xs text-muted">
                 <tr>
                   <th className="py-1 pr-2 text-left font-medium">{dict.admin.entries.class}</th>
@@ -130,24 +130,24 @@ export default async function StageDetailPage({ params }: PageProps<"/[lang]/adm
                       {classNames.get(row.class_id)}
                     </td>
                     <td className="py-2 pr-2 text-right">
-                      <input type="number" name={`start_order_${row.class_id}`} defaultValue={row.start_order} className={small} />
+                      <input type="number" name={`start_order_${row.class_id}`} aria-label={`${classNames.get(row.class_id)}: ${s.order}`} defaultValue={row.start_order} className={small} />
                     </td>
                     <td className="py-2 pr-2 text-right">
-                      <input type="number" min={1} name={`riders_per_slot_${row.class_id}`} defaultValue={row.riders_per_slot ?? ""} placeholder={s.stageDefault} className={small} />
+                      <input type="number" min={1} name={`riders_per_slot_${row.class_id}`} aria-label={`${classNames.get(row.class_id)}: ${s.perSlot}`} defaultValue={row.riders_per_slot ?? ""} placeholder={s.stageDefault} className={small} />
                     </td>
                     <td className="py-2 pr-2 text-right">
-                      <input type="number" min={1} name={`interval_${row.class_id}`} defaultValue={row.start_interval_seconds ?? ""} placeholder={s.stageDefault} className={small} />
+                      <input type="number" min={1} name={`interval_${row.class_id}`} aria-label={`${classNames.get(row.class_id)}: ${s.interval}`} defaultValue={row.start_interval_seconds ?? ""} placeholder={s.stageDefault} className={small} />
                     </td>
                     <td className="py-2 pr-2 text-right">
-                      <input type="number" min={0} name={`gap_${row.class_id}`} defaultValue={row.gap_before_seconds} className={small} />
+                      <input type="number" min={0} name={`gap_${row.class_id}`} aria-label={`${classNames.get(row.class_id)}: ${s.gapBefore}`} defaultValue={row.gap_before_seconds} className={small} />
                     </td>
                     <td className="py-2 pr-2 text-right">
-                      <input type="text" inputMode="decimal" name={`distance_${row.class_id}`} defaultValue={row.distance_km ?? ""} className={small} />
+                      <input type="text" inputMode="decimal" name={`distance_${row.class_id}`} aria-label={`${classNames.get(row.class_id)}: ${s.distance}`} defaultValue={row.distance_km ?? ""} className={small} />
                     </td>
                     <td className="py-2 text-right">
                       <input
                         type="datetime-local"
-                        name={`closes_${row.class_id}`}
+                        name={`closes_${row.class_id}`} aria-label={`${classNames.get(row.class_id)}: ${s.closesAt}`}
                         defaultValue={isoToEventLocal(row.course_closes_at)}
                         className="rounded border border-border bg-background px-2 py-1 text-sm"
                       />
@@ -209,7 +209,7 @@ export default async function StageDetailPage({ params }: PageProps<"/[lang]/adm
             <p className="mt-3 text-sm text-muted">{s.noStartList}</p>
           ) : (
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[40rem] text-sm">
                 <thead className="text-xs text-muted">
                   <tr>
                     <th className="py-1 pr-2 text-right font-medium">#</th>

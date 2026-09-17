@@ -79,9 +79,14 @@ export async function loadSeasonStandings(supabase: Client, seasonId: number): P
       .from("season_standings")
       .select("rider_id, class_id, rounds_ridden, gross_points, net_points, position, position_gross, drop_applies")
       .eq("season_id", seasonId),
-    supabase.from("round_results").select("event_id, rider_id, class_id, total_points").in("event_id", eventIds),
+    // A season has thousands of round results, past the API's 1000-row page: read them page by page.
+    allRows((from, to) =>
+      supabase.from("round_results").select("event_id, rider_id, class_id, total_points").in("event_id", eventIds).order("entry_id").range(from, to),
+    ),
     supabase.from("team_season_standings").select("club_id, team_points, position").eq("season_id", seasonId),
-    supabase.from("team_round_results").select("event_id, club_id, team_points").in("event_id", eventIds),
+    allRows((from, to) =>
+      supabase.from("team_round_results").select("event_id, club_id, team_points").in("event_id", eventIds).order("club_id").order("event_id").range(from, to),
+    ),
   ]);
 
   const riderIds = [...new Set((standings ?? []).map((row) => row.rider_id).filter((id): id is number => id != null))];
@@ -141,4 +146,17 @@ export async function loadSeasonStandings(supabase: Client, seasonId: number): P
     riders: riderRows.sort((a, b) => a.position - b.position),
     teams: teamRows.sort((a, b) => a.position - b.position),
   };
+}
+
+const PAGE = 1000;
+
+/** Reads every row of a query in pages of 1000, the most the API returns at once. */
+async function allRows<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<{ data: T[] }> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1);
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE) return { data: rows };
+  }
 }

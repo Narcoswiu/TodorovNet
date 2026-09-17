@@ -66,6 +66,7 @@ export default async function EventClassesPage({ params }: PageProps<"/[lang]/ad
                   <input
                     type="number"
                     name={`order_${cls.id}`}
+                    aria-label={`${localizedName(cls, lang)}: ${dict.admin.stages.order}`}
                     defaultValue={chosenOrder.get(cls.id) ?? cls.sort_order}
                     className="w-20 rounded border border-border bg-background px-2 py-1 text-right"
                   />

@@ -6,7 +6,7 @@ import { useSelectedLayoutSegment } from "next/navigation";
 export function AdminTabs({ base, tabs }: { base: string; tabs: { key: string; label: string }[] }) {
   const active = useSelectedLayoutSegment();
   return (
-    <nav className="-mx-4 mb-6 flex gap-1 overflow-x-auto border-b border-border px-4 lg:flex-wrap">
+    <nav className="mb-6 flex flex-wrap gap-x-1 border-b border-border">
       {tabs.map((tab) => (
         <Link
           key={tab.key}

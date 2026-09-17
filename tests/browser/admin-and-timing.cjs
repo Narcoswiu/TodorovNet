@@ -719,6 +719,11 @@ function cp1251(text) {
 
   await step("timekeeper voids a record from the phone list (two-step)", async () => {
     await clickButton(timer, "Анулирай", `#${riders[2]} ·`);
+    // A confirm faster than 0.7 s is ignored on purpose (double tap protection).
+    await clickButton(timer, "Потвърди анулиране", `#${riders[2]} ·`);
+    const stillActive = sql(`select count(*) from passings p join entries e on e.id = p.entry_id where p.stage_id = ${demoStage} and e.race_number = ${riders[2]} and p.point = 'finish' and p.voided_at is null`);
+    if (stillActive !== "1") throw new Error("a double tap voided the record");
+    await sleep(900);
     await clickButton(timer, "Потвърди анулиране", `#${riders[2]} ·`);
     await timer.waitForFunction(
       (label) => [...document.querySelectorAll("li")].some((li) => li.innerText.includes(label) && li.innerText.includes("Анулиран")),

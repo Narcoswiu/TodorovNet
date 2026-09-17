@@ -3,7 +3,7 @@ const COLORS: Record<string, string> = {
   black: "#111827",
   white: "#ffffff",
   red: "#dc2626",
-  green: "#16a34a",
+  green: "#15803d", // darker than pure green so white numbers stay readable
   blue: "#2563eb",
   purple: "#7c3aed",
 };

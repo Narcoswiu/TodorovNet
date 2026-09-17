@@ -30,7 +30,7 @@ export default async function GuidePage({ params }: PageProps<"/[lang]/guide">) 
               {role.heading}
             </a>
           ))}
-          <Link href={`/${lang}/t`} className="rounded-full bg-accent px-3 py-1 text-white">
+          <Link href={`/${lang}/t`} className="rounded-full bg-accent px-3 py-1 font-semibold text-accent-foreground">
             {g.openTiming}
           </Link>
         </nav>

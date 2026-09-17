@@ -15,8 +15,8 @@ export function SiteHeader({ lang, dict }: { lang: Locale; dict: Dictionary }) {
             Todorov<span className="text-gradient">NET</span>
           </span>
         </Link>
-        <nav className="flex items-center gap-5">
-          <Link href={`/${lang}/archive`} className={`hidden sm:inline ${link}`}>
+        <nav className="flex items-center gap-3 sm:gap-5">
+          <Link href={`/${lang}/archive`} className={link}>
             {dict.nav.archive}
           </Link>
           <Link href={`/${lang}/t`} className={link}>

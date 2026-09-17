@@ -48,7 +48,7 @@ export async function GET(request: Request, { params }: RouteContext<"/api/pdf/p
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="${fileName}"`,
       // A publication never changes, so its PDF can be cached.
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": "private, max-age=600",
     },
   });
 }

@@ -1292,18 +1292,21 @@ export type Database = {
         Row: {
           drop_worst_rounds: number
           id: number
+          is_final: boolean
           name: string
           year: number
         }
         Insert: {
           drop_worst_rounds?: number
           id?: never
+          is_final?: boolean
           name: string
           year: number
         }
         Update: {
           drop_worst_rounds?: number
           id?: never
+          is_final?: boolean
           name?: string
           year?: number
         }
@@ -2087,6 +2090,7 @@ export type Database = {
         Row: {
           classes_scored: number | null
           club_id: number | null
+          club_points: number | null
           event_id: number | null
           position: number | null
           team_points: number | null
@@ -2148,6 +2152,13 @@ export type Database = {
         Returns: number
       }
       build_qualifying_groups: { Args: { p_stage_id: number }; Returns: number }
+      can_manage_rider: {
+        Args: {
+          p_rider_id: number
+          p_roles: Database["public"]["Enums"]["staff_role"][]
+        }
+        Returns: boolean
+      }
       event_staff_members: {
         Args: { p_event_id: number }
         Returns: {

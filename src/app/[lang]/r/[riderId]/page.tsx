@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PositionBadge } from "@/components/brand/status-badge";
 import { SiteHeader } from "@/components/site-header";
-import { hasLocale, t } from "@/i18n/config";
+import { hasLocale, t, type Locale } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
 import { localizedName, riderName, transliterate } from "@/i18n/localize";
 import { formatDateRange } from "@/lib/format";
@@ -75,7 +75,7 @@ export default async function RiderPage({ params }: PageProps<"/[lang]/r/[riderI
         <div className="relative mb-8 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-accent/20 via-card to-card p-6 sm:p-8">
           <div className="flex flex-wrap items-center gap-5">
             <span className="rise font-display grid size-24 place-items-center rounded-full bg-gradient-to-br from-accent to-accent-2 text-4xl font-bold text-accent-foreground shadow-[0_10px_40px_-10px_var(--accent)]">
-              {(rider.first_name[0] ?? "") + (rider.last_name[0] ?? "")}
+              {initials(riderName(rider.first_name, rider.last_name, lang))}
             </span>
             <div className="min-w-0">
               <h1 className="rise font-display text-4xl font-bold uppercase leading-none tracking-tight sm:text-5xl" style={{ "--d": "80ms" } as React.CSSProperties}>
@@ -104,7 +104,7 @@ export default async function RiderPage({ params }: PageProps<"/[lang]/r/[riderI
               { label: p.statRounds, value: scored.length },
               { label: p.statWins, value: scored.filter((row) => row.position === 1).length },
               { label: p.statPodiums, value: scored.filter((row) => (row.position ?? 99) <= 3).length },
-              { label: p.statBest, value: scored.length ? `${Math.min(...scored.map((row) => row.position ?? 99))}.` : "–" },
+              { label: p.statBest, value: scored.length ? ordinal(Math.min(...scored.map((row) => row.position ?? 99)), lang) : "–" },
             ].map((stat) => (
               <div key={stat.label} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
                 <dt className="text-[0.65rem] font-semibold uppercase tracking-wider text-white/60">{stat.label}</dt>
@@ -122,7 +122,7 @@ export default async function RiderPage({ params }: PageProps<"/[lang]/r/[riderI
                 <li key={`${row.season_id}-${row.class_id}`}>
                   <Link href={`/${lang}/s/${row.season_id}`} className="hover:underline">
                     {seasonYear.get(row.season_id ?? 0)} · {className.get(row.class_id ?? 0)} ·{" "}
-                    <span className="font-semibold">{row.drop_applies ? row.position : row.position_gross}.</span>{" "}
+                    <span className="font-semibold">{ordinal((row.drop_applies ? row.position : row.position_gross) ?? 0, lang)}</span>{" "}
                     {row.drop_applies ? row.net_points : row.gross_points} {p.points.toLowerCase()}
                   </Link>
                 </li>
@@ -170,4 +170,19 @@ export default async function RiderPage({ params }: PageProps<"/[lang]/r/[riderI
       </main>
     </>
   );
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .slice(0, 2);
+}
+
+/** "3." in Bulgarian, "3rd" in English. */
+function ordinal(n: number, lang: Locale) {
+  if (lang === "bg") return `${n}.`;
+  const tail = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${n}${tail}`;
 }

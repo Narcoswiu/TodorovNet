@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/pdf/**": ["./src/assets/fonts/**"],
   },
+  experimental: {
+    // A branded 404 for any unmatched URL; the root layout lives under the dynamic [lang] segment.
+    globalNotFound: true,
+  },
   images: {
     // Event covers: uploaded to Supabase Storage, or free photos linked from Unsplash.
     // Object form (not new URL(...)) so image links may carry query strings, e.g. Unsplash sizing.

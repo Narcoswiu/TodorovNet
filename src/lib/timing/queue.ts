@@ -112,7 +112,7 @@ export async function voidOnServer(
   return true;
 }
 
-export type SyncResult = { synced: number; rejected: number; pending: number; offline: boolean };
+export type SyncResult = { synced: number; rejected: number; pending: number; offline: boolean; signedOut: boolean };
 
 let syncing: Promise<SyncResult> | null = null;
 
@@ -124,22 +124,41 @@ export function syncQueue(supabase: SupabaseClient<Database>): Promise<SyncResul
   return syncing;
 }
 
+const SEND_TIMEOUT_MS = 15_000;
+
 async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> {
   const db = await getDb();
-  const pending = (await db.getAllFromIndex("items", "by_status", "pending")).sort((a, b) =>
-    a.recorded_at.localeCompare(b.recorded_at),
+  // SOS and course messages go first; timing records keep their recorded order.
+  const pending = (await db.getAllFromIndex("items", "by_status", "pending")).sort(
+    (a, b) =>
+      Number(b.table === "marshal_messages") - Number(a.table === "marshal_messages") || a.recorded_at.localeCompare(b.recorded_at),
   );
-  const result: SyncResult = { synced: 0, rejected: 0, pending: pending.length, offline: false };
+  const result: SyncResult = { synced: 0, rejected: 0, pending: pending.length, offline: false, signedOut: false };
+  if (!pending.length) return result;
+
+  // Without a valid session the database would refuse every record as "no permission". That is not the
+  // record's fault: keep everything pending and ask the timekeeper to sign in again.
+  const { data: session } = await supabase.auth.getSession();
+  if (!session.session) {
+    result.signedOut = true;
+    return result;
+  }
 
   for (const item of pending) {
-    const { error } =
-      item.table === "passings"
-        ? await supabase.from("passings").insert({ ...item.payload, client_id: item.client_id })
-        : item.table === "laps"
-          ? await supabase.from("laps").insert({ ...item.payload, client_id: item.client_id })
-          : await supabase.from("marshal_messages").insert({ ...item.payload, client_id: item.client_id });
+    const signal = AbortSignal.timeout(SEND_TIMEOUT_MS);
+    let error: DbError | null;
+    try {
+      ({ error } =
+        item.table === "passings"
+          ? await supabase.from("passings").insert({ ...item.payload, client_id: item.client_id }).abortSignal(signal)
+          : item.table === "laps"
+            ? await supabase.from("laps").insert({ ...item.payload, client_id: item.client_id }).abortSignal(signal)
+            : await supabase.from("marshal_messages").insert({ ...item.payload, client_id: item.client_id }).abortSignal(signal));
+    } catch (thrown) {
+      error = { message: thrown instanceof Error ? thrown.message : "network error" };
+    }
 
-    if (error && isNetworkError(error)) {
+    if (error && !isPermanentError(error)) {
       await db.put("items", { ...item, attempts: item.attempts + 1 });
       result.offline = true;
       break; // No connection: keep the order, try again later.
@@ -160,6 +179,23 @@ async function runSync(supabase: SupabaseClient<Database>): Promise<SyncResult> 
   return result;
 }
 
+/** Puts rejected records of an event back in the queue, e.g. after the jury fixed an entry. */
+export async function retryRejected(eventId: number): Promise<number> {
+  const db = await getDb();
+  const rejected = (await db.getAllFromIndex("items", "by_event", eventId)).filter((item) => item.status === "rejected");
+  for (const item of rejected) await db.put("items", { ...item, status: "pending", error: null });
+  return rejected.length;
+}
+
+/** Asks the browser not to evict the queue when the phone runs low on space. */
+export async function persistStorage(): Promise<void> {
+  try {
+    await navigator.storage?.persist?.();
+  } catch {
+    // Not supported: IndexedDB is still used, just without the guarantee.
+  }
+}
+
 /** Last known event data, so the app still opens and resolves race numbers without a connection. */
 export async function saveSnapshot(key: string, data: unknown): Promise<void> {
   await (await getDb()).put("snapshots", { key, data, saved_at: Date.now() });
@@ -172,15 +208,20 @@ export async function loadSnapshot<T>(key: string): Promise<{ data: T; saved_at:
 
 type DbError = { code?: string; message: string };
 
-function isNetworkError(error: DbError): boolean {
-  return !error.code && /fetch|network|load failed|timed? ?out/i.test(error.message);
+/**
+ * Only a verdict about the record itself is final: a duplicate, an unknown rider or checkpoint, a value the
+ * database refuses. Anything else (no signal, a timeout, a 502 page from a captive portal, an expired
+ * login) is temporary, and the record stays in the queue to be sent again.
+ */
+function isPermanentError(error: DbError): boolean {
+  return !!error.code && /^(23|22)/.test(error.code);
 }
 
+/** A short code the app translates (see dictionaries timing.errors); unknown errors keep the database text. */
 function explain(error: DbError): string {
-  if (error.code === "23505" && error.message.includes("one_active")) {
-    return "Вече има запис за този участник на тази точка. Анулирайте стария, ако е грешен.";
-  }
-  if (error.code === "42501") return "Нямате права да записвате в това състезание.";
-  if (error.code === "23503") return "Непознат участник, етап или контрола.";
+  if (error.code === "23505" && error.message.includes("one_active")) return "duplicate";
+  if (error.code === "42501") return "forbidden";
+  if (error.code === "23503") return "unknown";
+  if (error.code === "23514") return "wrongClass";
   return error.message;
 }

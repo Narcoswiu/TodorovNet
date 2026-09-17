@@ -141,7 +141,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         <nav
-          className="sticky top-[3.6rem] z-20 -mx-4 mb-5 flex gap-1 overflow-x-auto bg-background/80 px-4 py-2 backdrop-blur-xl"
+          className="sticky top-[3.6rem] z-20 -mx-4 mb-5 flex flex-wrap gap-1 bg-background/80 px-4 py-2 backdrop-blur-xl"
           aria-label={dict.event.standings}
         >
           {stages.map((stage) => (
