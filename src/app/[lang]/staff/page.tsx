@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChangePassword } from "@/components/change-password";
 import { SiteHeader } from "@/components/site-header";
 import { hasLocale, t } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
@@ -61,7 +62,10 @@ export default async function StaffHubPage({ params }: PageProps<"/[lang]/staff"
                 </Link>
               ))}
             </div>
-            <form action={signOut} className="mt-8">
+            <div className="mt-8">
+              <ChangePassword dict={dict} />
+            </div>
+            <form action={signOut} className="mt-6">
               <input type="hidden" name="lang" value={lang} />
               <button type="submit" className="text-sm text-muted underline hover:text-foreground">
                 {dict.common.signOut}
