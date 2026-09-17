@@ -480,7 +480,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   // ── Render ──
   const shell = (children: React.ReactNode) => (
     <div className={`${sun ? "timing-sun" : ""} flex min-h-dvh flex-1 flex-col bg-background text-foreground`}>
-      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-border bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-2">
           <Link href={`/${lang}`} className="text-lg font-bold tracking-tight">
             Todorov<span className="text-accent">NET</span>
@@ -503,7 +503,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pb-8 pt-3">{children}</main>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pt-3 pb-[max(2rem,env(safe-area-inset-bottom))]">{children}</main>
     </div>
   );
 
