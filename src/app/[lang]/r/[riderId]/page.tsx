@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { PositionBadge } from "@/components/brand/status-badge";
 import { SiteHeader } from "@/components/site-header";
 import { hasLocale, t } from "@/i18n/config";
 import { getDictionary } from "@/i18n/get-dictionary";
@@ -65,27 +66,57 @@ export default async function RiderPage({ params }: PageProps<"/[lang]/r/[riderI
     })
     .sort((a, b) => b.event.date_from.localeCompare(a.event.date_from));
 
+  const scored = resultRows.filter((row) => row.total_points);
+
   return (
     <>
       <SiteHeader lang={lang} dict={dict} />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{riderName(rider.first_name, rider.last_name, lang)}</h1>
-        <p className="mt-1 text-sm text-muted">
-          {[rider.clubs?.name ? text(rider.clubs.name) : null, rider.country].filter(Boolean).join(" · ")}
-        </p>
-        <div className="mt-2 flex flex-wrap gap-2 text-sm">
-          {(numbers ?? []).map((row) =>
-            row.seasons ? (
-              <Link key={row.seasons.id} href={`/${lang}/s/${row.seasons.id}/numbers`} className="rounded border border-border px-2 py-0.5">
-                {t(p.seasonNumber, { number: row.race_number, year: row.seasons.year })}
-              </Link>
-            ) : null,
-          )}
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
+        <div className="relative mb-8 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-accent/20 via-card to-card p-6 sm:p-8">
+          <div className="flex flex-wrap items-center gap-5">
+            <span className="rise font-display grid size-24 place-items-center rounded-full bg-gradient-to-br from-accent to-accent-2 text-4xl font-bold text-accent-foreground shadow-[0_10px_40px_-10px_var(--accent)]">
+              {(rider.first_name[0] ?? "") + (rider.last_name[0] ?? "")}
+            </span>
+            <div className="min-w-0">
+              <h1 className="rise font-display text-4xl font-bold uppercase leading-none tracking-tight sm:text-5xl" style={{ "--d": "80ms" } as React.CSSProperties}>
+                {riderName(rider.first_name, rider.last_name, lang)}
+              </h1>
+              <p className="rise mt-2 text-muted" style={{ "--d": "140ms" } as React.CSSProperties}>
+                {[rider.clubs?.name ? text(rider.clubs.name) : null, rider.country].filter(Boolean).join(" · ")}
+              </p>
+              <div className="rise mt-3 flex flex-wrap gap-2 text-sm" style={{ "--d": "180ms" } as React.CSSProperties}>
+                {(numbers ?? []).map((row) =>
+                  row.seasons ? (
+                    <Link
+                      key={row.seasons.id}
+                      href={`/${lang}/s/${row.seasons.id}/numbers`}
+                      className="font-display rounded-md border border-white/15 bg-black/30 px-2.5 py-0.5 font-bold hover:border-accent"
+                    >
+                      {t(p.seasonNumber, { number: row.race_number, year: row.seasons.year })}
+                    </Link>
+                  ) : null,
+                )}
+              </div>
+            </div>
+          </div>
+          <dl className="rise mt-6 grid grid-cols-4 gap-2" style={{ "--d": "240ms" } as React.CSSProperties}>
+            {[
+              { label: p.statRounds, value: scored.length },
+              { label: p.statWins, value: scored.filter((row) => row.position === 1).length },
+              { label: p.statPodiums, value: scored.filter((row) => (row.position ?? 99) <= 3).length },
+              { label: p.statBest, value: scored.length ? `${Math.min(...scored.map((row) => row.position ?? 99))}.` : "–" },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                <dt className="text-[0.65rem] font-semibold uppercase tracking-wider text-white/60">{stat.label}</dt>
+                <dd className="font-display text-2xl font-bold tabular-nums">{stat.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
 
         {(standings ?? []).length > 0 && (
           <section className="mt-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">{p.standings}</h2>
+            <h2 className="font-display mb-3 text-2xl font-bold uppercase tracking-wide">{p.standings}</h2>
             <ul className="space-y-1 text-sm">
               {(standings ?? []).map((row) => (
                 <li key={`${row.season_id}-${row.class_id}`}>
@@ -101,23 +132,23 @@ export default async function RiderPage({ params }: PageProps<"/[lang]/r/[riderI
         )}
 
         <section className="mt-6">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">{p.results}</h2>
+          <h2 className="font-display mb-3 text-2xl font-bold uppercase tracking-wide">{p.results}</h2>
           {!resultRows.length ? (
             <p className="text-sm text-muted">{p.noResults}</p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border bg-card px-3">
+            <div className="overflow-x-auto rounded-2xl border border-border bg-card px-4">
               <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="text-xs text-muted">
+                  <tr className="text-[0.7rem] uppercase tracking-wider text-muted">
                     <th className="py-2 pr-2 text-left font-medium">{p.event}</th>
                     <th className="py-2 pr-2 text-left font-medium">{p.class}</th>
                     <th className="py-2 pr-2 text-right font-medium">{p.position}</th>
                     <th className="py-2 text-right font-medium">{p.points}</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="row-in">
                   {resultRows.map((row) => (
-                    <tr key={`${row.event_id}-${row.class_id}`} className="border-t border-border">
+                    <tr key={`${row.event_id}-${row.class_id}`} className="border-t border-border/70 transition-colors hover:bg-white/[0.03]">
                       <td className="py-2 pr-2">
                         <Link href={`/${lang}/e/${row.event.id}?stage=round`} className="font-medium hover:underline">
                           {text(row.event.name)}
@@ -127,7 +158,7 @@ export default async function RiderPage({ params }: PageProps<"/[lang]/r/[riderI
                         </div>
                       </td>
                       <td className="whitespace-nowrap py-2 pr-2 text-muted">{className.get(row.class_id ?? 0)}</td>
-                      <td className="py-2 pr-2 text-right font-semibold tabular-nums">{row.total_points ? row.position : "–"}</td>
+                      <td className="py-2 pr-2 text-right font-semibold tabular-nums">{row.total_points ? <PositionBadge position={row.position} /> : "–"}</td>
                       <td className="py-2 text-right tabular-nums">{row.total_points || ""}</td>
                     </tr>
                   ))}

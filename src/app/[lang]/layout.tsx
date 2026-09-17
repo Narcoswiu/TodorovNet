@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Oswald } from "next/font/google";
 import { notFound } from "next/navigation";
 import { SiteFooter } from "@/components/site-footer";
 import { hasLocale, locales } from "@/i18n/config";
@@ -9,6 +9,13 @@ import "../globals.css";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin", "cyrillic"],
+});
+
+// Condensed display face for headings, positions and race numbers: the motorsport look, with Cyrillic.
+const display = Oswald({
+  variable: "--font-display",
+  subsets: ["latin", "cyrillic"],
+  weight: ["500", "600", "700"],
 });
 
 const geistMono = Geist_Mono({
@@ -37,8 +44,8 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[la
   const dict = getDictionary(lang);
 
   return (
-    <html lang={lang} className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">
+    <html lang={lang} className={`${geistSans.variable} ${geistMono.variable} ${display.variable} h-full antialiased`}>
+      <body className="page-glow min-h-full flex flex-col">
         {children}
         <SiteFooter lang={lang} dict={dict} />
       </body>

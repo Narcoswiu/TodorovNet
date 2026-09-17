@@ -25,8 +25,9 @@ async function step(name, fn) {
   }
 }
 
+// innerText follows CSS text-transform, so headings styled uppercase are compared without case.
 const waitText = (page, text, timeout = 15000) =>
-  page.waitForFunction((t) => document.body.innerText.includes(t), { timeout }, text);
+  page.waitForFunction((t) => document.body.innerText.toLowerCase().includes(t.toLowerCase()), { timeout }, text);
 
 const waitPath = (page, predicate, timeout = 15000) =>
   page.waitForFunction(predicate, { timeout });
@@ -148,6 +149,23 @@ function cp1251(text) {
     await submitForm(admin, "Запази", { location: "Тестово поле" });
     await waitText(admin, "Запазено.");
     if (sql(`select location from events where id = ${eventId}`) !== "Тестово поле") throw new Error("location not saved");
+  });
+
+  await step("organizer uploads an event photo; it is resized to WebP and shown on the home page", async () => {
+    await admin.goto(`${APP}/bg/admin/events/${eventId}/settings`, { waitUntil: "networkidle2" });
+    const input = await admin.$('input[name="cover"]');
+    await input.uploadFile(path.join(__dirname, "../../public/icons/icon-512.png"));
+    await waitText(admin, "Снимката е запазена.");
+    const url = sql(`select coalesce(image_url, '') from events where id = ${eventId}`);
+    if (!/\/storage\/v1\/object\/public\/event-media\/events\/\d+\/cover-\d+\.webp$/.test(url)) throw new Error(url);
+    const response = await fetch(url);
+    if (response.status !== 200 || response.headers.get("content-type") !== "image/webp") throw new Error(`${response.status} ${response.headers.get("content-type")}`);
+    const visitor = await browser.newPage();
+    await visitor.goto(`${APP}/bg`, { waitUntil: "networkidle2" });
+    const shown = await visitor.evaluate(() => [...document.querySelectorAll("img")].some((img) => decodeURIComponent(img.src).includes("event-media/events/")));
+    await visitor.close();
+    if (!shown) throw new Error("photo not on the home page");
+    return "WebP in event-media";
   });
 
   await step("add one entry by hand", async () => {
@@ -461,7 +479,7 @@ function cp1251(text) {
   const clickInCard = (page, cardText, buttonText) =>
     page.evaluate(
       (cardText, buttonText) => {
-        const card = [...document.querySelectorAll("section")].find((s) => s.innerText.includes(cardText));
+        const card = [...document.querySelectorAll("section")].find((s) => s.innerText.toLowerCase().includes(cardText.toLowerCase()));
         if (!card) throw new Error(`no card "${cardText}"`);
         const button = [...card.querySelectorAll("button[type=submit]")].find((b) => b.textContent.trim() === buttonText);
         if (!button) throw new Error(`no button "${buttonText}" in "${cardText}"`);

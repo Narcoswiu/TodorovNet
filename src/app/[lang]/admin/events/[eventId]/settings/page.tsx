@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { ActionForm } from "@/components/admin/action-form";
+import { EventCoverEditor } from "@/components/admin/event-cover-editor";
 import { EventFields } from "@/components/admin/event-fields";
 import { Card } from "@/components/admin/fields";
 import { hasLocale } from "@/i18n/config";
@@ -17,7 +18,7 @@ export default async function EventSettingsPage({ params }: PageProps<"/[lang]/a
   const [{ data: event }, { data: seasons }] = await Promise.all([
     viewer.supabase
       .from("events")
-      .select("id, name, location, date_from, date_to, kind, season_id, round_number, status, ranking")
+      .select("id, name, location, date_from, date_to, kind, season_id, round_number, status, ranking, image_url")
       .eq("id", eventId)
       .maybeSingle(),
     viewer.supabase.from("seasons").select("id, year, name").order("year", { ascending: false }),
@@ -25,6 +26,10 @@ export default async function EventSettingsPage({ params }: PageProps<"/[lang]/a
   if (!event) notFound();
 
   return (
+    <div className="space-y-6">
+    <Card title={dict.admin.cover.title}>
+      <EventCoverEditor eventId={event.id} imageUrl={event.image_url} dict={dict} />
+    </Card>
     <Card title={dict.admin.tabs.settings}>
       <ActionForm action={updateEvent} submitLabel={dict.admin.save} pendingLabel={dict.common.loading}>
         <input type="hidden" name="lang" value={lang} />
@@ -32,5 +37,6 @@ export default async function EventSettingsPage({ params }: PageProps<"/[lang]/a
         <EventFields dict={dict} seasons={seasons ?? []} values={event} />
       </ActionForm>
     </Card>
+    </div>
   );
 }
