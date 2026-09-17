@@ -25,14 +25,14 @@ function Links({ lang, label, query }: Props & { query: string }) {
   const current = `${pathname}${query}`;
 
   return (
-    <nav aria-label={label} className="flex rounded-md border border-border text-xs font-medium">
+    <nav aria-label={label} className="flex rounded-full border border-border bg-card/60 p-0.5 text-xs font-semibold">
       {locales.map((locale) => (
         <a
           key={locale}
           href={`/api/locale?to=${locale}&path=${encodeURIComponent(current)}`}
           hrefLang={locale}
           aria-current={locale === lang ? "true" : undefined}
-          className={`px-2 py-1 first:rounded-l-md last:rounded-r-md ${
+          className={`rounded-full px-2.5 py-1 transition-colors ${
             locale === lang ? "bg-foreground text-background" : "text-muted hover:text-foreground"
           }`}
         >

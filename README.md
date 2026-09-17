@@ -161,7 +161,7 @@ The demo seed signs in with these local-only accounts (password `demo-todorovnet
 | `npm run test:unit` | GPS analysis: deviation, signal gaps, missed waypoints |
 | `npm run db:test` | SQL scenarios: results, points, penalties, publications, permissions (runs in a rolled-back transaction) |
 | `npm run e2e` | Timing API end to end, including realtime delivery |
-| `npm run test:browser` | 43 real-browser steps: admin panel, imports, GPS check, protests, publishing, and the timing app online, offline and reopened without a connection |
+| `npm run test:browser` | 44 real-browser steps: admin panel, imports, photo upload, GPS check, protests, publishing, and the timing app online, offline and reopened without a connection |
 
 Run the browser tests against a production build, because offline reopening needs the service worker:
 

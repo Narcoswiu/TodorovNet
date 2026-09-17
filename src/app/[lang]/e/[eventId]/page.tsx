@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EventCover } from "@/components/brand/event-cover";
+import { StatusBadge } from "@/components/brand/status-badge";
 import { LiveResults } from "@/components/results/live-results";
 import { StartList } from "@/components/results/start-list";
 import { SiteHeader } from "@/components/site-header";
@@ -15,7 +17,7 @@ async function loadEvent(eventId: number) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("events")
-    .select("id, name, location, date_from, date_to, status, round_number, season_id, kind, ranking")
+    .select("id, name, location, date_from, date_to, status, round_number, season_id, kind, ranking, image_url")
     .eq("id", eventId)
     .maybeSingle();
   return data;
@@ -67,39 +69,81 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
       .from("publications")
       .select("id, stage_id, state, version, published_at, protest_deadline_at, published_by_name")
       .eq("event_id", eventId)
-      .order("published_at", { ascending: false }),
+      .order("published_at", { ascending: false })
+      .order("version", { ascending: false }),
   ]);
   const publication = (latestPublications ?? []).find((pub) => pub.stage_id === (selectedStage?.id ?? null));
 
   const text = (value: string) => (lang === "en" ? transliterate(value) : value);
   const tabClass = (active: boolean) =>
-    `whitespace-nowrap rounded-md px-3 py-1.5 text-sm ${
-      active ? "bg-foreground text-background" : "text-muted hover:bg-card hover:text-foreground"
+    `whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+      active ? "bg-foreground text-background shadow-[0_6px_20px_-8px_rgb(255_255_255/0.5)]" : "text-muted hover:bg-white/5 hover:text-foreground"
     }`;
+  const days = new Set(stages.map((stage) => stage.day_number)).size;
+  const stats = [
+    { value: entries.length, label: dict.event.statRiders },
+    { value: classes.length, label: dict.event.statClasses },
+    { value: stages.length, label: dict.event.statStages },
+    { value: days, label: dict.event.statDays },
+  ];
 
   return (
     <>
       <SiteHeader lang={lang} dict={dict} />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
-        <div className="mb-5">
-          <h1 className="text-2xl font-semibold tracking-tight">{text(event.name)}</h1>
-          <p className="mt-1 text-sm text-muted">
-            {[
-              event.round_number ? t(dict.home.round, { n: event.round_number }) : null,
-              text(event.location),
-              formatDateRange(event.date_from, event.date_to, lang),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+      <section className="relative isolate overflow-hidden border-b border-white/5">
+        <EventCover
+          src={event.image_url}
+          alt={text(event.name)}
+          seed={event.id}
+          sizes="100vw"
+          priority
+          animate
+          className="absolute inset-0 -z-10 h-full w-full"
+        />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-background via-background/75 to-background/20" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-background/85 to-transparent" />
+        <div className="mx-auto max-w-6xl px-4 pb-8 pt-16 sm:pt-24">
+          <div className="rise flex flex-wrap items-center gap-2">
+            <StatusBadge status={event.status} dict={dict} />
+            {event.round_number && (
+              <span className="rounded-full border border-white/15 bg-black/40 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white/80 backdrop-blur">
+                {t(dict.home.round, { n: event.round_number })}
+              </span>
+            )}
+          </div>
+          <h1
+            className="rise font-display mt-3 max-w-4xl text-4xl font-bold uppercase leading-[0.95] tracking-tight sm:text-6xl"
+            style={{ "--d": "80ms" } as React.CSSProperties}
+          >
+            {text(event.name)}
+          </h1>
+          <p className="rise mt-2 text-white/75" style={{ "--d": "140ms" } as React.CSSProperties}>
+            {[text(event.location), formatDateRange(event.date_from, event.date_to, lang)].filter(Boolean).join(" · ")}
+            {event.kind === "championship_round" && event.season_id && (
+              <>
+                {" · "}
+                <Link href={`/${lang}/s/${event.season_id}`} className="font-semibold text-accent hover:underline">
+                  {dict.season.link} →
+                </Link>
+              </>
+            )}
           </p>
-          {event.kind === "championship_round" && event.season_id && (
-            <Link href={`/${lang}/s/${event.season_id}`} className="mt-1 inline-block text-sm text-accent underline">
-              {dict.season.link}
-            </Link>
-          )}
+          <dl className="rise mt-6 grid max-w-2xl grid-cols-4 gap-2" style={{ "--d": "200ms" } as React.CSSProperties}>
+            {stats.map((stat) => (
+              <div key={stat.label} className="rounded-xl border border-white/10 bg-black/35 px-3 py-2 backdrop-blur">
+                <dt className="text-[0.65rem] font-semibold uppercase tracking-wider text-white/60">{stat.label}</dt>
+                <dd className="font-display text-2xl font-bold tabular-nums">{stat.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
+      </section>
 
-        <nav className="-mx-4 mb-4 flex gap-1 overflow-x-auto px-4" aria-label={dict.event.standings}>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+        <nav
+          className="sticky top-[3.6rem] z-20 -mx-4 mb-5 flex gap-1 overflow-x-auto bg-background/80 px-4 py-2 backdrop-blur-xl"
+          aria-label={dict.event.standings}
+        >
           {stages.map((stage) => (
             <Link key={stage.id} href={`?stage=${stage.id}`} className={tabClass(stage.id === selectedStage?.id)}>
               {stageName(stage, lang, { day: dict.event.day, stageType: dict.stageType })}
@@ -114,18 +158,18 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
 
         {selectedStage?.type === "navigation" && (
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex rounded-md border border-border text-xs font-medium">
+            <div className="flex rounded-full border border-border bg-card p-0.5 text-xs font-semibold">
               <Link
                 href={`?stage=${selectedStage.id}`}
                 aria-current={!showStartList ? "page" : undefined}
-                className={`rounded-l-md px-3 py-1 ${!showStartList ? "bg-foreground text-background" : "text-muted"}`}
+                className={`rounded-full px-3.5 py-1.5 transition-colors ${!showStartList ? "bg-accent text-accent-foreground" : "text-muted hover:text-foreground"}`}
               >
                 {dict.event.standings}
               </Link>
               <Link
                 href={`?stage=${selectedStage.id}&view=start`}
                 aria-current={showStartList ? "page" : undefined}
-                className={`rounded-r-md px-3 py-1 ${showStartList ? "bg-foreground text-background" : "text-muted"}`}
+                className={`rounded-full px-3.5 py-1.5 transition-colors ${showStartList ? "bg-accent text-accent-foreground" : "text-muted hover:text-foreground"}`}
               >
                 {dict.event.startList}
               </Link>
@@ -142,7 +186,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
           <>
             {(startSlots?.length ?? 0) > 0 && (
               <p className="mb-3 text-sm">
-                <a href={`/api/pdf/start-list/${selectedStage.id}?lang=${lang}`} target="_blank" rel="noreferrer" className="text-accent underline">
+                <a href={`/api/pdf/start-list/${selectedStage.id}?lang=${lang}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 font-semibold hover:border-accent">
                   {dict.pdf.startList} · PDF
                 </a>
               </p>
@@ -153,12 +197,12 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
           view && (
             <>
             <div
-              className={`mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${
+              className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-3 text-sm ${
                 publication?.state === "official"
-                  ? "border-good text-good"
+                  ? "border-good/50 bg-good/10 text-good"
                   : publication
-                    ? "border-warn text-warn"
-                    : "border-border text-muted"
+                    ? "border-warn/50 bg-warn/10 text-warn"
+                    : "border-border bg-card text-muted"
               }`}
             >
               <span>
@@ -177,7 +221,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/[l
                 )}
               </span>
               {publication && (
-                <a href={`/api/pdf/publication/${publication.id}?lang=${lang}`} target="_blank" rel="noreferrer" className="underline">
+                <a href={`/api/pdf/publication/${publication.id}?lang=${lang}`} target="_blank" rel="noreferrer" className="rounded-full border border-current px-3 py-1 font-semibold">
                   {dict.publication.pdf}
                 </a>
               )}

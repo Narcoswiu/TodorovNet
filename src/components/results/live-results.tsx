@@ -14,6 +14,7 @@ import {
   type StageSelector,
   type StageView,
 } from "@/lib/results/queries";
+import { PositionBadge } from "@/components/brand/status-badge";
 import { createClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -126,7 +127,7 @@ export function LiveResults({ lang, dict, eventId, selector, initialView, classe
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="-mx-1 flex flex-wrap gap-1">
           <FilterChip active={classFilter == null} onClick={() => setClassFilter(null)}>
             {dict.event.allClasses}
@@ -137,9 +138,9 @@ export function LiveResults({ lang, dict, eventId, selector, initialView, classe
             </FilterChip>
           ))}
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted" aria-live="polite">
+        <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted" aria-live="polite">
           <span
-            className={`size-2 rounded-full ${
+            className={`size-2 rounded-full ${connection === "live" ? "live-dot " : ""}
               connection === "live" || connection === "polling" ? "bg-good" : connection === "offline" ? "bg-warn" : "bg-muted"
             }`}
             aria-hidden
@@ -166,9 +167,14 @@ export function LiveResults({ lang, dict, eventId, selector, initialView, classe
           ) : (
             <RoundTable rows={view.rows.filter((row) => row.class_id === cls.id)} {...{ lang, dict, entryById, cls }} />
           );
+        const podium = podiumFor(view, cls.id, dict);
         return (
-          <section key={cls.id} className="mb-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">{localizedName(cls, lang)}</h2>
+          <section key={cls.id} className="reveal mb-10">
+            <h2 className="font-display mb-3 flex items-center gap-3 text-2xl font-bold uppercase tracking-wide">
+              <span className="h-6 w-1.5 rounded-full bg-accent" aria-hidden />
+              {localizedName(cls, lang)}
+            </h2>
+            {podium.length > 0 && <Podium places={podium} entryById={entryById} cls={cls} lang={lang} />}
             {table}
           </section>
         );
@@ -209,9 +215,9 @@ function NavigationTable({ rows, lang, dict, entryById, cls }: TableProps & { ro
       {sorted.map((row) => {
         const status = row.result_status ?? "";
         return (
-          <tr key={row.entry_id} className="border-t border-border">
+          <tr key={row.entry_id} className="border-t border-border/70 transition-colors hover:bg-white/[0.03]">
             <td className="py-2 pr-2 text-right font-medium tabular-nums">
-              {status === "classified" ? row.position : <StatusLabel status={status} dict={dict} />}
+              {status === "classified" ? <PositionBadge position={row.position} /> : <StatusLabel status={status} dict={dict} />}
             </td>
             <td className="py-2 pr-2">
               <Plate cls={cls} number={row.race_number} />
@@ -273,8 +279,8 @@ function EnduroCrossTable({
       ]}
     >
       {sorted.map((row) => (
-        <tr key={row.entry_id} className="border-t border-border">
-          <td className="py-2 pr-2 text-right font-medium tabular-nums">{row.position ?? ""}</td>
+        <tr key={row.entry_id} className="border-t border-border/70 transition-colors hover:bg-white/[0.03]">
+          <td className="py-2 pr-2 text-right font-medium tabular-nums"><PositionBadge position={row.position} /></td>
           <td className="py-2 pr-2">
             <Plate cls={cls} number={row.race_number} />
           </td>
@@ -314,8 +320,8 @@ function RoundTable({
   return (
     <Table head={[dict.results.pos, dict.results.number, dict.results.rider, t(dict.event.day, { n: 1 }), t(dict.event.day, { n: 2 }), dict.results.total]}>
       {sorted.map((row) => (
-        <tr key={row.entry_id} className="border-t border-border">
-          <td className="py-2 pr-2 text-right font-medium tabular-nums">{row.total_points ? row.position : ""}</td>
+        <tr key={row.entry_id} className="border-t border-border/70 transition-colors hover:bg-white/[0.03]">
+          <td className="py-2 pr-2 text-right font-medium tabular-nums">{row.total_points ? <PositionBadge position={row.position} /> : ""}</td>
           <td className="py-2 pr-2">
             <Plate cls={cls} number={row.race_number} />
           </td>
@@ -347,9 +353,9 @@ function RoundTimeTable({
   return (
     <Table head={[dict.results.pos, dict.results.number, dict.results.rider, dict.results.total, dict.results.gap]}>
       {sorted.map((row) => (
-        <tr key={row.entry_id} className="border-t border-border">
+        <tr key={row.entry_id} className="border-t border-border/70 transition-colors hover:bg-white/[0.03]">
           <td className="py-2 pr-2 text-right font-medium tabular-nums">
-            {row.result_status === "classified" ? row.position : <StatusLabel status={row.result_status ?? ""} dict={dict} />}
+            {row.result_status === "classified" ? <PositionBadge position={row.position} /> : <StatusLabel status={row.result_status ?? ""} dict={dict} />}
           </td>
           <td className="py-2 pr-2">
             <Plate cls={cls} number={row.race_number} />
@@ -370,10 +376,10 @@ function RoundTimeTable({
 
 function Table({ head, hideOnMobile = [], children }: { head: string[]; hideOnMobile?: number[]; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card px-3">
+    <div className="overflow-x-auto rounded-2xl border border-border bg-card px-4 shadow-[0_20px_50px_-30px_rgb(0_0_0/0.8)]">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="text-xs text-muted">
+          <tr className="text-[0.7rem] uppercase tracking-wider text-muted">
             {head.map((label, index) => (
               <th
                 key={index}
@@ -387,7 +393,7 @@ function Table({ head, hideOnMobile = [], children }: { head: string[]; hideOnMo
             ))}
           </tr>
         </thead>
-        <tbody>{children}</tbody>
+        <tbody className="row-in">{children}</tbody>
       </table>
     </div>
   );
@@ -397,7 +403,7 @@ function RiderCell({ entry, lang }: { entry: EntryInfo | undefined; lang: Locale
   if (!entry) return <td className="py-2 pr-2" />;
   return (
     <td className="w-full py-2 pr-2">
-      <div className="font-medium leading-tight">{riderName(entry.first_name, entry.last_name, lang)}</div>
+      <div className="font-semibold leading-tight">{riderName(entry.first_name, entry.last_name, lang)}</div>
       {entry.club && (
         <div className="text-xs text-muted">{lang === "en" ? transliterate(entry.club) : entry.club}</div>
       )}
@@ -408,7 +414,7 @@ function RiderCell({ entry, lang }: { entry: EntryInfo | undefined; lang: Locale
 function Plate({ cls, number }: { cls: ClassInfo; number: number | null }) {
   return (
     <span
-      className="inline-block min-w-10 rounded border border-border px-1.5 py-0.5 text-center font-mono text-sm font-semibold tabular-nums"
+      className="font-display inline-block min-w-11 rounded-md border border-white/15 px-1.5 py-0.5 text-center text-base font-bold tabular-nums shadow-inner"
       style={numberPlateStyle(cls.number_bg, cls.number_fg)}
     >
       {number}
@@ -428,8 +434,10 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-full border px-3 py-1 text-xs ${
-        active ? "border-foreground bg-foreground text-background" : "border-border text-muted hover:text-foreground"
+      className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all ${
+        active
+          ? "border-accent bg-accent text-accent-foreground shadow-[0_6px_20px_-8px_var(--accent)]"
+          : "border-border bg-card text-muted hover:border-white/25 hover:text-foreground"
       }`}
     >
       {children}
@@ -439,4 +447,83 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 
 function Empty({ dict }: { dict: Dictionary }) {
   return <p className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted">{dict.common.noData}</p>;
+}
+
+type PodiumPlace = { position: number; entryId: number; headline: string; detail: string };
+
+/** Top three of a class for the podium strip, taken from whatever view is showing. */
+function podiumFor(view: StageView, classId: number, dict: Dictionary): PodiumPlace[] {
+  const places: PodiumPlace[] = [];
+  if (view.kind === "navigation" || view.kind === "round_time") {
+    for (const row of view.rows) {
+      if (row.class_id !== classId || row.result_status !== "classified" || row.entry_id == null || row.position == null) continue;
+      if (row.position > 3) continue;
+      places.push({
+        position: row.position,
+        entryId: row.entry_id,
+        headline: formatDuration(row.total_s, { tenths: true }),
+        detail: row.position === 1 ? "" : formatGap(row.gap_s),
+      });
+    }
+  } else if (view.kind === "round") {
+    for (const row of view.rows) {
+      if (row.class_id !== classId || !row.total_points || row.entry_id == null || row.position == null || row.position > 3) continue;
+      places.push({ position: row.position, entryId: row.entry_id, headline: `${row.total_points}`, detail: dict.results.points });
+    }
+  } else {
+    for (const row of view.overall) {
+      if (row.class_id !== classId || !row.points || row.entry_id == null || row.position == null || row.position > 3) continue;
+      places.push({ position: row.position, entryId: row.entry_id, headline: `${row.points}`, detail: dict.results.points });
+    }
+  }
+  return places.sort((a, b) => a.position - b.position);
+}
+
+function Podium({
+  places,
+  entryById,
+  cls,
+  lang,
+}: {
+  places: PodiumPlace[];
+  entryById: Map<number, EntryInfo>;
+  cls: ClassInfo;
+  lang: Locale;
+}) {
+  // Classic podium order on wide screens: 2 · 1 · 3.
+  const order = (position: number) => (position === 1 ? "sm:order-2" : position === 2 ? "sm:order-1" : "sm:order-3");
+  const tone = (position: number) =>
+    position === 1
+      ? "from-gold/25 border-gold/60 sm:-translate-y-3"
+      : position === 2
+        ? "from-silver/20 border-silver/50"
+        : "from-bronze/20 border-bronze/50";
+  return (
+    <ol className="mb-4 grid gap-3 sm:grid-cols-3 sm:items-end">
+      {places.map((place, index) => {
+        const entry = entryById.get(place.entryId);
+        return (
+          <li
+            key={place.entryId}
+            className={`rise relative overflow-hidden rounded-2xl border bg-gradient-to-b to-card p-4 ${order(place.position)} ${tone(place.position)}`}
+            style={{ "--d": `${index * 90}ms` } as React.CSSProperties}
+          >
+            <span className="font-display pointer-events-none absolute -right-1 -top-5 text-8xl font-bold text-white/[0.06]">{place.position}</span>
+            <div className="flex items-center gap-3">
+              <PositionBadge position={place.position} />
+              <Plate cls={cls} number={entry?.race_number ?? null} />
+            </div>
+            <div className="mt-3 truncate text-lg font-bold leading-tight">
+              {entry ? riderName(entry.first_name, entry.last_name, lang) : ""}
+            </div>
+            {entry?.club && <div className="truncate text-xs text-muted">{lang === "en" ? transliterate(entry.club) : entry.club}</div>}
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-display text-2xl font-bold tabular-nums">{place.headline}</span>
+              {place.detail && <span className="text-xs text-muted">{place.detail}</span>}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
 }

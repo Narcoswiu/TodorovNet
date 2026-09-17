@@ -72,8 +72,8 @@ export function CheckboxField({
 
 export function Card({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <section className="mb-6 rounded-lg border border-border bg-card p-4">
-      {title && <h2 className="mb-3 text-sm font-semibold">{title}</h2>}
+    <section className="mb-6 rounded-2xl border border-border bg-card p-5">
+      {title && <h2 className="font-display mb-4 text-lg font-bold uppercase tracking-wide">{title}</h2>}
       {children}
     </section>
   );
