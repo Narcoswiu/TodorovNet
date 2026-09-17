@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { t, type Locale } from "@/i18n/config";
 import type { Dictionary } from "@/i18n/get-dictionary";
@@ -39,6 +39,7 @@ const READ_TIMEOUT_MS = 4000;
 const SYNC_EVERY_MS = 10_000;
 const STATUS_TONE = { synced: "text-good", rejected: "text-bad", pending: "text-warn", voided: "text-muted" } as const;
 const CLOCK_EVERY_MS = 5 * 60_000;
+const SUN_KEY = "todorovnet.timing.sun";
 
 export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   const supabase = useMemo(() => createClient(), []);
@@ -63,7 +64,72 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [offset, setOffset] = useState<number | null>(null);
   const [online, setOnline] = useState(true);
-  const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" } | null>(null);
+  const [flash, setFlash] = useState<{ text: string; tone: "good" | "bad"; key: number } | null>(null);
+  const [now, setNow] = useState<Date | null>(null);
+  const [sun, setSun] = useState(false);
+  const audio = useRef<AudioContext | null>(null);
+  const keyHandler = useRef<(event: KeyboardEvent) => void>(() => undefined);
+
+  // Every result is felt as well as seen: a timekeeper looks at the rider, not the screen.
+  const setMessage = useCallback((next: { text: string; tone: "good" | "bad" } | null) => {
+    setFlash(next ? { ...next, key: Date.now() } : null);
+    if (!next) return;
+    try {
+      navigator.vibrate?.(next.tone === "good" ? 60 : [120, 80, 120]);
+    } catch {
+      // No vibration motor or not allowed.
+    }
+    try {
+      audio.current ??= new AudioContext();
+      const tone = audio.current.createOscillator();
+      const gain = audio.current.createGain();
+      tone.frequency.value = next.tone === "good" ? 1320 : 330;
+      gain.gain.value = 0.15;
+      tone.connect(gain).connect(audio.current.destination);
+      tone.start();
+      tone.stop(audio.current.currentTime + (next.tone === "good" ? 0.09 : 0.3));
+    } catch {
+      // No audio: vibration and colour still tell the story.
+    }
+  }, []);
+
+  function toggleSun() {
+    setSun((current) => {
+      try {
+        localStorage.setItem(SUN_KEY, current ? "0" : "1");
+      } catch {
+        // Private mode: the choice lasts until the page closes.
+      }
+      return !current;
+    });
+  }
+
+  // ── Clock, saved theme, physical keyboards ──
+  useEffect(() => {
+    const tick = () => setNow(new Date(Date.now() + storedClockOffset()));
+    const first = setTimeout(() => {
+      tick();
+      try {
+        setSun(localStorage.getItem(SUN_KEY) === "1");
+      } catch {
+        // Keep the default theme.
+      }
+    }, 0);
+    const timer = setInterval(tick, 1000);
+    const onKey = (event: KeyboardEvent) => keyHandler.current(event);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!flash) return;
+    const timer = setTimeout(() => setFlash(null), 4000);
+    return () => clearTimeout(timer);
+  }, [flash]);
 
   // ── Session, service worker, connectivity ──
   useEffect(() => {
@@ -396,16 +462,48 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
     } else setDigits((d) => (d.length < 4 ? d + key : d));
   }
 
+  // Bluetooth keypads and laptops: digits, Backspace, Escape and Enter work like the on-screen keys.
+  useEffect(() => {
+    keyHandler.current = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+      if (/^[0-9]$/.test(event.key)) press(event.key);
+      else if (event.key === "Backspace") press("back");
+      else if (event.key === "Escape") press("clear");
+      else if (event.key === "Enter" && typedEntry) {
+        event.preventDefault();
+        record();
+      }
+    };
+  });
+
   // ── Render ──
   const shell = (children: React.ReactNode) => (
-    <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pb-6">
-      <header className="flex items-center justify-between py-3">
-        <Link href={`/${lang}`} className="font-semibold">
-          Todorov<span className="text-accent">NET</span>
-        </Link>
-        <LanguageSwitcher lang={lang} label={dict.common.language} />
+    <div className={`${sun ? "timing-sun" : ""} flex min-h-dvh flex-1 flex-col bg-background text-foreground`}>
+      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-2">
+          <Link href={`/${lang}`} className="text-lg font-bold tracking-tight">
+            Todorov<span className="text-accent">NET</span>
+          </Link>
+          <span className="font-mono text-2xl font-bold tabular-nums" suppressHydrationWarning>
+            {now ? formatClock(now) : "--:--:--"}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleSun}
+              aria-pressed={sun}
+              aria-label={dict.timing.sunMode}
+              title={dict.timing.sunMode}
+              className={`grid size-10 place-items-center rounded-full border-2 text-lg ${sun ? "border-foreground bg-foreground text-background" : "border-border"}`}
+            >
+              ☀
+            </button>
+            <LanguageSwitcher lang={lang} label={dict.common.language} />
+          </div>
+        </div>
       </header>
-      {children}
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pb-8 pt-3">{children}</main>
     </div>
   );
 
@@ -413,110 +511,134 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
 
   if (userId === null) {
     return shell(
-      <div className="mt-10 space-y-4 text-center">
-        <p>{dict.timing.signInToRecord}</p>
+      <div className="mt-10 space-y-6 text-center">
+        <p className="text-lg">{dict.timing.signInToRecord}</p>
         <Link
           href={`/${lang}/login?next=/${lang}/t`}
-          className="inline-block rounded-md bg-accent px-5 py-2.5 font-medium text-accent-foreground"
+          className="block rounded-2xl bg-accent px-5 py-4 text-xl font-bold text-accent-foreground"
         >
           {dict.common.signIn}
         </Link>
+        <InstallApp dict={dict} />
       </div>,
     );
   }
 
   if (eventId == null || !data) {
     return shell(
-      <div className="mt-4">
-        <h1 className="mb-3 text-lg font-semibold">{dict.timing.chooseEvent}</h1>
+      <div>
+        <h1 className="mb-4 text-2xl font-bold">{dict.timing.chooseEvent}</h1>
         {events === null && <p className="text-muted">{dict.common.loading}</p>}
         {events?.length === 0 && <p className="text-muted">{dict.timing.noEvents}</p>}
-        <ul className="space-y-2">
+        <ul className="space-y-3">
           {events?.map((event) => (
             <li key={event.id}>
               <button
                 type="button"
                 onClick={() => setEventId(event.id)}
-                className="w-full rounded-lg border border-border bg-card p-4 text-left hover:border-accent"
+                className="w-full rounded-2xl border-2 border-border bg-card p-5 text-left active:border-accent"
               >
-                <div className="font-medium">{event.name}</div>
-                <div className="text-sm text-muted">{event.location}</div>
+                <div className="text-lg font-bold">{event.name}</div>
+                <div className="text-muted">{event.location}</div>
               </button>
             </li>
           ))}
         </ul>
+        <div className="mt-8">
+          <InstallApp dict={dict} />
+        </div>
       </div>,
     );
   }
 
   const pending = items.filter((item) => item.status === "pending").length;
-  const select =
-    "w-full rounded-md border border-border bg-card px-3 py-2.5 text-base outline-none focus:border-accent";
+  const chip = (active: boolean) =>
+    `shrink-0 rounded-xl border-2 px-4 py-3 text-base font-bold ${
+      active ? "border-accent bg-accent text-accent-foreground" : "border-border bg-card"
+    }`;
 
   return shell(
     <>
-      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        <span className={`flex items-center gap-1.5 ${online ? "text-good" : "text-warn"}`}>
-          <span className={`size-2 rounded-full ${online ? "bg-good" : "bg-warn"}`} aria-hidden />
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm font-semibold">
+        <span
+          className={`flex items-center gap-1.5 rounded-full border-2 px-3 py-1 ${online ? "border-good text-good" : "border-warn text-warn"}`}
+        >
+          <span className={`size-2.5 rounded-full ${online ? "bg-good" : "bg-warn"}`} aria-hidden />
           {online ? dict.common.live : dict.common.offline}
         </span>
-        <span className={pending ? "text-warn" : "text-muted"}>
+        <span className={`rounded-full border-2 px-3 py-1 ${pending ? "border-warn text-warn" : "border-border text-muted"}`}>
           {pending ? t(dict.timing.pending, { n: pending }) : dict.timing.allSynced}
         </span>
-        {offset != null && <span className="text-muted">{t(dict.timing.clockOffset, { ms: Math.round(offset) })}</span>}
+        {offset != null && <span className="text-xs text-muted">{t(dict.timing.clockOffset, { ms: Math.round(offset) })}</span>}
       </div>
 
       {snapshotTime && (
-        <p className="mb-3 rounded-md bg-card px-3 py-2 text-xs text-warn">
+        <p className="mb-3 rounded-xl border-2 border-warn px-3 py-2 text-sm font-medium text-warn">
           {t(dict.timing.savedOffline, { time: formatClock(new Date(snapshotTime)) })}
         </p>
       )}
 
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <label className="text-xs text-muted">
-          {dict.timing.stage}
-          <select className={select} value={stage?.id ?? ""} onChange={(e) => setStageId(Number(e.target.value))}>
-            {data.stages.map((s) => (
+      <label className="mb-2 block text-sm font-semibold text-muted">
+        {dict.timing.stage}
+        <select
+          className="mt-1 block w-full rounded-xl border-2 border-border bg-card px-3 py-3 text-lg font-semibold text-foreground"
+          value={stage?.id ?? ""}
+          onChange={(e) => setStageId(Number(e.target.value))}
+        >
+          {data.stages.map((s) => (
+            <option key={s.id} value={s.id}>
+              {stageName(s, lang, { day: dict.event.day, stageType: dict.stageType })}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {stage?.type === "enduro_cross" ? (
+        <label className="mb-3 block text-sm font-semibold text-muted">
+          {dict.timing.point}
+          <select
+            className="mt-1 block w-full rounded-xl border-2 border-border bg-card px-3 py-3 text-lg font-semibold text-foreground"
+            value={session?.id ?? ""}
+            onChange={(e) => setSessionId(Number(e.target.value))}
+          >
+            {sessions.map((s) => (
               <option key={s.id} value={s.id}>
-                {stageName(s, lang, { day: dict.event.day, stageType: dict.stageType })}
+                {sessionLabel(s)}
               </option>
             ))}
           </select>
         </label>
-
-        {stage?.type === "enduro_cross" ? (
-          <label className="text-xs text-muted">
-            {dict.timing.point}
-            <select className={select} value={session?.id ?? ""} onChange={(e) => setSessionId(Number(e.target.value))}>
-              {sessions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {sessionLabel(s)}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <label className="text-xs text-muted">
-            {dict.timing.point}
-            <select className={select} value={point} onChange={(e) => setPoint(e.target.value)}>
-              <option value="start">{dict.timing.start}</option>
-              {checkpoints.map((cp) => (
-                <option key={cp.id} value={`cp:${cp.id}`}>
-                  {cp.code} · {localizedName(cp, lang)}
-                </option>
-              ))}
-              <option value="finish">{dict.timing.finish}</option>
-            </select>
-          </label>
-        )}
-      </div>
+      ) : (
+        <div className="-mx-4 mb-3 overflow-x-auto px-4" role="group" aria-label={dict.timing.point}>
+          <div className="flex gap-2">
+            <button type="button" aria-pressed={point === "start"} onClick={() => setPoint("start")} className={chip(point === "start")}>
+              {dict.timing.start}
+            </button>
+            {checkpoints.map((cp) => (
+              <button
+                key={cp.id}
+                type="button"
+                aria-pressed={point === `cp:${cp.id}`}
+                onClick={() => setPoint(`cp:${cp.id}`)}
+                className={chip(point === `cp:${cp.id}`)}
+                title={localizedName(cp, lang)}
+              >
+                {cp.code}
+              </button>
+            ))}
+            <button type="button" aria-pressed={point === "finish"} onClick={() => setPoint("finish")} className={chip(point === "finish")}>
+              {dict.timing.finish}
+            </button>
+          </div>
+        </div>
+      )}
 
       {stage?.type === "enduro_cross" && session && !session.started_at && (
         <button
           type="button"
           onClick={startSession}
           disabled={!online}
-          className="mb-3 w-full rounded-md border border-good py-2 text-sm font-medium text-good disabled:opacity-50"
+          className="mb-3 h-14 w-full rounded-xl border-2 border-good text-lg font-bold text-good disabled:opacity-50"
         >
           ▶ {dict.timing.start} · {sessionLabel(session)}
         </button>
@@ -524,7 +646,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
 
       {stage?.type === "enduro_cross" && session?.started_at && (
         session.red_flag_at ? (
-          <p className="mb-3 rounded-md bg-bad px-3 py-2 text-center text-sm font-semibold text-white">
+          <p className="mb-3 rounded-xl bg-bad px-3 py-3 text-center text-lg font-bold text-white">
             {t(dict.timing.redFlagSet, { time: formatClock(session.red_flag_at) })}
           </p>
         ) : (
@@ -532,23 +654,30 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
             type="button"
             onClick={redFlag}
             disabled={!online}
-            className="mb-3 w-full rounded-md border-2 border-bad py-2 text-sm font-bold text-bad disabled:opacity-50"
+            className="mb-3 h-14 w-full rounded-xl border-2 border-bad text-lg font-bold text-bad disabled:opacity-50"
           >
             ⚑ {dict.timing.redFlag} · {sessionLabel(session)}
           </button>
         )
       )}
 
-      <div className="mb-3 rounded-lg border border-border bg-card p-4 text-center">
-        <div className="text-xs text-muted">{dict.timing.raceNumber}</div>
-        <div className="font-mono text-5xl font-semibold tabular-nums" aria-live="polite">
+      <div
+        className={`relative mb-3 overflow-hidden rounded-2xl border-2 bg-card px-4 pb-3 pt-2 text-center ${
+          flash ? (flash.tone === "good" ? "border-good" : "border-bad") : "border-border"
+        }`}
+      >
+        <div className="flex items-center justify-between text-sm font-semibold text-muted">
+          <span>{dict.timing.raceNumber}</span>
+          <span>{stage?.type === "enduro_cross" ? (session ? sessionLabel(session) : "") : pointLabel()}</span>
+        </div>
+        <div className="font-mono text-7xl font-black leading-tight tabular-nums sm:text-8xl" aria-live="polite">
           {digits || "—"}
         </div>
-        <div className="mt-1 h-5 text-sm">
+        <div className="min-h-7 text-lg font-semibold">
           {typedEntry ? (
             <span>
               {riderName(typedEntry.first_name, typedEntry.last_name, lang)}
-              <span className="text-muted"> · {localizedName(classById.get(typedEntry.class_id) ?? { name: "" }, lang)}</span>
+              <span className="font-normal text-muted"> · {localizedName(classById.get(typedEntry.class_id) ?? { name: "" }, lang)}</span>
             </span>
           ) : typedNumber != null ? (
             <span className="text-bad">{t(dict.timing.unknownNumber, { n: typedNumber })}</span>
@@ -557,14 +686,14 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         <button
           type="button"
           onClick={() => setStampedAt(correctedNow(offset ?? 0))}
-          className={`mt-3 w-full rounded-md py-2 text-sm font-medium ${
-            stampedAt ? "bg-foreground text-background" : "border border-border"
+          className={`mt-2 w-full rounded-xl py-2.5 text-base font-bold ${
+            stampedAt ? "bg-foreground text-background" : "border-2 border-border"
           }`}
         >
-          ⏱ {stampedAt ? formatClock(stampedAt) : formatClock(correctedNow(offset ?? 0)).slice(0, 5)}
+          ⏱ {stampedAt ? formatClock(stampedAt) : dict.timing.stampNow}
         </button>
-        <details className="mt-2 text-left text-xs text-muted" open={!!manualTime}>
-          <summary className="cursor-pointer select-none">
+        <details className="mt-2 text-left text-sm text-muted" open={!!manualTime}>
+          <summary className="cursor-pointer select-none font-semibold">
             {dict.timing.manualTime}
             {manualTime ? `: ${manualTime}` : ""}
           </summary>
@@ -576,7 +705,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
                 name="manual_date"
                 value={manualDate}
                 onChange={(e) => setManualDate(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-border bg-background px-2 py-2 text-base text-foreground"
+                className="mt-1 block w-full rounded-lg border-2 border-border bg-background px-2 py-2 text-base text-foreground"
               />
             </label>
             <label className="block">
@@ -587,7 +716,7 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
                 name="manual_time"
                 value={manualTime}
                 onChange={(e) => setManualTime(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-border bg-background px-2 py-2 text-base text-foreground"
+                className="mt-1 block w-full rounded-lg border-2 border-border bg-background px-2 py-2 text-base text-foreground"
               />
             </label>
           </div>
@@ -595,13 +724,28 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         </details>
       </div>
 
+      {flash && (
+        <p
+          role="status"
+          key={flash.key}
+          className={`timing-flash mb-3 rounded-2xl px-4 py-3 text-center text-xl font-black ${
+            flash.tone === "good" ? "bg-good text-white" : "bg-bad text-white"
+          }`}
+        >
+          {flash.text}
+        </p>
+      )}
+
       <div className="mb-3 grid grid-cols-3 gap-2">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9", "clear", "0", "back"].map((key) => (
           <button
             key={key}
             type="button"
             onClick={() => press(key)}
-            className="h-16 rounded-lg border border-border bg-card font-mono text-2xl font-medium active:bg-border"
+            aria-label={key === "back" ? "⌫" : key === "clear" ? "C" : undefined}
+            className={`h-[4.5rem] rounded-2xl border-2 font-mono text-4xl font-bold active:scale-95 active:bg-border ${
+              key === "clear" || key === "back" ? "border-border bg-background text-muted" : "border-border bg-card"
+            }`}
           >
             {key === "back" ? "⌫" : key === "clear" ? "C" : key}
           </button>
@@ -612,62 +756,26 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
         type="button"
         onClick={record}
         disabled={!typedEntry}
-        className="mb-2 h-16 w-full rounded-lg bg-accent text-xl font-semibold text-accent-foreground disabled:opacity-40"
+        className="mb-4 h-20 w-full rounded-2xl bg-accent text-3xl font-black tracking-wide text-accent-foreground shadow-lg active:scale-[0.98] disabled:opacity-35 disabled:shadow-none"
       >
         {dict.timing.record}
       </button>
 
-      {message && (
-        <p role="status" className={`mb-3 text-center text-sm ${message.tone === "good" ? "text-good" : "text-bad"}`}>
-          {message.text}
-        </p>
-      )}
-
-      <div className="mb-3 mt-4 rounded-lg border border-bad p-3">
-        {sosOpen ? (
-          <div className="space-y-2">
-            <p className="text-xs text-muted">{dict.timing.sosHelp}</p>
-            <textarea
-              name="course_message"
-              value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
-              placeholder={dict.timing.messagePlaceholder}
-              rows={2}
-              className="block w-full rounded-md border border-border bg-background px-3 py-2 text-base"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => sendMessage("sos")} className="h-14 rounded-lg bg-bad text-lg font-bold text-white">
-                {dict.timing.sosConfirm}
-              </button>
-              <button type="button" onClick={() => sendMessage("info")} className="h-14 rounded-lg border border-border text-sm font-medium">
-                {dict.timing.sendInfo}
-              </button>
-            </div>
-            <button type="button" onClick={() => setSosOpen(false)} className="w-full text-xs text-muted underline">
-              {dict.common.cancel}
-            </button>
-          </div>
-        ) : (
-          <button type="button" onClick={() => setSosOpen(true)} className="h-12 w-full rounded-lg font-bold text-bad">
-            🆘 {dict.timing.sos} / {dict.timing.message}
-          </button>
-        )}
-      </div>
-
-      <h2 className="mb-2 mt-4 text-sm font-medium text-muted">{dict.timing.recent}</h2>
-      <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">{dict.timing.recent}</h2>
+      <ul className="space-y-2">
         {items.slice(0, 30).map((item) => {
           const at =
             item.table === "passings" ? item.payload.passed_at : item.table === "laps" ? item.payload.crossed_at : item.payload.sent_at;
+          const edge = { synced: "border-l-good", rejected: "border-l-bad", pending: "border-l-warn", voided: "border-l-border" }[item.status];
           return (
-            <li key={item.client_id} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
+            <li key={item.client_id} className={`flex items-start justify-between gap-3 rounded-xl border-2 border-l-8 border-border bg-card px-3 py-2 ${edge}`}>
               <div>
-                <div className={`font-medium ${item.status === "voided" ? "text-muted line-through" : ""}`}>{item.label}</div>
-                {item.error && <div className="text-xs text-bad">{item.error}</div>}
+                <div className={`text-lg font-bold ${item.status === "voided" ? "text-muted line-through" : ""}`}>{item.label}</div>
+                {item.error && <div className="text-sm text-bad">{item.error}</div>}
               </div>
               <div className="text-right">
-                <div className="font-mono tabular-nums">{formatClock(at)}</div>
-                <div className={`text-xs ${STATUS_TONE[item.status]}`}>
+                <div className="font-mono text-lg font-bold tabular-nums">{formatClock(at)}</div>
+                <div className={`text-sm font-semibold ${STATUS_TONE[item.status]}`}>
                   {
                     {
                       synced: dict.timing.synced,
@@ -680,11 +788,11 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
                 {item.status === "synced" &&
                   item.table !== "marshal_messages" &&
                   (confirmVoid === item.client_id ? (
-                    <button type="button" onClick={() => voidItem(item)} className="mt-1 text-xs font-medium text-bad underline">
+                    <button type="button" onClick={() => voidItem(item)} className="mt-1 text-sm font-bold text-bad underline">
                       {dict.timing.voidConfirm}
                     </button>
                   ) : (
-                    <button type="button" onClick={() => setConfirmVoid(item.client_id)} className="mt-1 text-xs text-muted underline">
+                    <button type="button" onClick={() => setConfirmVoid(item.client_id)} className="mt-1 text-sm text-muted underline">
                       {dict.timing.void}
                     </button>
                   ))}
@@ -693,7 +801,91 @@ export function TimingApp({ lang, dict }: { lang: Locale; dict: Dictionary }) {
           );
         })}
       </ul>
+
+      <div className="mt-6 rounded-2xl border-2 border-bad p-3">
+        {sosOpen ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted">{dict.timing.sosHelp}</p>
+            <textarea
+              name="course_message"
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              placeholder={dict.timing.messagePlaceholder}
+              rows={2}
+              className="block w-full rounded-xl border-2 border-border bg-background px-3 py-2 text-base text-foreground"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => sendMessage("sos")} className="h-16 rounded-xl bg-bad text-xl font-black text-white">
+                {dict.timing.sosConfirm}
+              </button>
+              <button type="button" onClick={() => sendMessage("info")} className="h-16 rounded-xl border-2 border-border text-base font-bold">
+                {dict.timing.sendInfo}
+              </button>
+            </div>
+            <button type="button" onClick={() => setSosOpen(false)} className="w-full py-1 text-sm text-muted underline">
+              {dict.common.cancel}
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setSosOpen(true)} className="h-14 w-full rounded-xl text-xl font-black text-bad">
+            🆘 {dict.timing.sos} / {dict.timing.message}
+          </button>
+        )}
+      </div>
+
+      <div className="mt-6">
+        <InstallApp dict={dict} />
+      </div>
     </>,
+  );
+}
+
+type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+
+/** "Install the app" on Android/desktop Chrome, a short how-to on iPhone, nothing once installed. */
+function InstallApp({ dict }: { dict: Dictionary }) {
+  const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
+  const [mode, setMode] = useState<"hidden" | "prompt" | "ios">("hidden");
+
+  useEffect(() => {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone;
+    if (standalone) return;
+    const onPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallEvent(event as InstallEvent);
+      setMode("prompt");
+    };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const timer = ios ? setTimeout(() => setMode("ios"), 0) : undefined;
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+    };
+  }, []);
+
+  if (mode === "hidden") return null;
+  if (mode === "ios") {
+    return (
+      <p className="rounded-2xl border-2 border-dashed border-border p-4 text-center text-sm">
+        📲 <span className="font-bold">{dict.timing.install}</span>
+        <br />
+        {dict.timing.installIos}
+      </p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        await installEvent?.prompt();
+        setMode("hidden");
+      }}
+      className="h-14 w-full rounded-2xl border-2 border-foreground text-lg font-bold"
+    >
+      📲 {dict.timing.install}
+    </button>
   );
 }
 
