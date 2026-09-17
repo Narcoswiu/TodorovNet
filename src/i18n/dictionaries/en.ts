@@ -603,6 +603,15 @@ export const en: Dictionary = {
     timingText: "Record times from a phone; works without coverage.",
     manualText: "How to use the system, step by step, plus a printable PDF.",
     open: "Open",
+    password: {
+      title: "Change your password",
+      new: "New password (at least 8 characters)",
+      repeat: "Repeat the password",
+      save: "Save password",
+      saved: "Password changed.",
+      tooShort: "The password must be at least 8 characters.",
+      mismatch: "The passwords do not match.",
+    },
   },
   footer: {
     guide: "Officials' guide",
